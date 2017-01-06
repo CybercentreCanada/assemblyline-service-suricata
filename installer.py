@@ -58,7 +58,7 @@ def install(alsi):
         alsi.runcmd('sudo chown -R %s %s' % (alsi.config['system']['user'], directory))
 
     alsi.runcmd('sudo cp %s %s' %
-               (os.path.join(alsi.alroot, 'pkg', 'assemblyline', 'al', 'service', 'suricata', 'conf', 'suricata.yaml'),
+               (os.path.join(alsi.alroot, 'pkg', 'al_services', 'alsvc_suricata', 'conf', 'suricata.yaml'),
                 '/etc/suricata/'))
     alsi.runcmd('sudo chown %s /etc/suricata/suricata.yaml' % alsi.config['system']['user'])
 
