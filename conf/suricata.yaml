@@ -589,6 +589,7 @@ stream:
   max-sessions: 2000000
   prealloc-sessions: 1000000
   inline: no                    # no inline mode
+  async-oneside: true
   reassembly:
     memcap: 14gb
     depth: 6mb                  # reassemble 1mb into a stream
