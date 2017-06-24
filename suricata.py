@@ -18,7 +18,7 @@ class Suricata(ServiceBase):
     SERVICE_CATEGORY = 'Networking'
     SERVICE_ENABLED = True
     SERVICE_STAGE = "CORE"
-    SERVICE_REVISION = ServiceBase.parse_revision('$Id: 2021d906006158b7d4afbfadaf24f809e1573b56 $')
+    SERVICE_REVISION = ServiceBase.parse_revision('$Id$')
     SERVICE_TIMEOUT = 60
     SERVICE_VERSION = '1'
     SERVICE_CPU_CORES = 1
@@ -29,7 +29,7 @@ class Suricata(ServiceBase):
         "SURICATA_CONFIG": "/etc/suricata/suricata.yaml",
         "SURE_SCORE": "MALWARE TROJAN CURRENT_EVENTS CnC Checkin",
         "VHIGH_SCORE": "EXPLOIT SCAN Adware PUP",
-        "RULES_URL": "http://rules.emergingthreats.net/open/suricata/emerging.rules.tar.gz",
+        "RULES_URLS": ["http://rules.emergingthreats.net/open/suricata/emerging.rules.tar.gz"],
         "HOME_NET": "any"
     }
 
@@ -39,12 +39,15 @@ class Suricata(ServiceBase):
         self.suricata_sc = None
         self.suricata_process = None
         self.last_rule_update = None
-        self.rules_url = cfg.get("RULES_URL", self.SERVICE_DEFAULT_CONFIG["RULES_URL"])
+        self.rules_urls = cfg.get("RULES_URLS", self.SERVICE_DEFAULT_CONFIG["RULES_URLS"])
         self.home_net = cfg.get("HOME_NET", self.SERVICE_DEFAULT_CONFIG["HOME_NET"])
         self.oinkmaster_update_file = '/etc/suricata/oinkmaster'
 
     def update_suricata(self, **_):
-        subprocess.call(["/usr/sbin/oinkmaster",  "-Q", "-u", self.rules_url, "-o", "/etc/suricata/rules"])
+        command = ["/usr/sbin/oinkmaster",  "-Q", "-o", "/etc/suricata/rules"]
+        for rules_url in self.rules_urls:
+            command.extend(["-u", rules_url])
+        subprocess.call(command)
         subprocess.call(["touch", self.oinkmaster_update_file])
 
     def start(self):

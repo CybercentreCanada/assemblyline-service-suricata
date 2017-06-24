@@ -67,10 +67,14 @@ def install(alsi):
     home_net = home_net.replace('/', '\/').replace('[', '\[').replace(']', '\]')
     alsi.sudo_sed_inline('/etc/suricata/suricata.yaml', ['s/__HOME_NET__/{home_net}/g'.format(home_net=home_net)])
 
-    rules_url = alsi.config['services']['master_list']['Suricata']['config']['RULES_URL']
-    rules_url = rules_url.replace('/', '\/').replace('[', '\[').replace(']', '\]').replace(':', '\:')
+    rules_urls = alsi.config['services']['master_list']['Suricata']['config']['RULES_URLS']
 
-    alsi.runcmd("sudo /usr/sbin/oinkmaster -Q -u %s -o /etc/suricata/rules" % rules_url)
+    rules_command = ["sudo", "/usr/sbin/oinkmaster", "-Q", "-o", "/etc/suricata/rules"]
+    for rules_url in rules_urls:
+        rules_command.extend(["-u",
+                              rules_url.replace('/', '\/').replace('[', '\[').replace(']', '\]').replace(':', '\:')])
+    alsi.runcmd(" ".join(rules_command))
+
     alsi.runcmd("sudo touch /etc/suricata/oinkmaster")
     alsi.runcmd('sudo chown -R %s /etc/suricata/rules' % alsi.config['system']['user'])
     alsi.runcmd('sudo chown %s /etc/suricata/oinkmaster' % alsi.config['system']['user'])
