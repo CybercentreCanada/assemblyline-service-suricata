@@ -43,12 +43,22 @@ class Suricata(ServiceBase):
         self.home_net = cfg.get("HOME_NET", self.SERVICE_DEFAULT_CONFIG["HOME_NET"])
         self.oinkmaster_update_file = '/etc/suricata/oinkmaster'
 
+    # Update our local rules using Oinkmaster
     def update_suricata(self, **_):
         command = ["/usr/sbin/oinkmaster",  "-Q", "-o", "/etc/suricata/rules"]
         for rules_url in self.rules_urls:
             command.extend(["-u", rules_url])
         subprocess.call(command)
         subprocess.call(["touch", self.oinkmaster_update_file])
+
+    # Use an external tool to strip frame headers
+    def strip_frame_headers(self, filepath):
+        new_filepath = os.path.join(os.path.dirname(filepath), "striped.pcap")
+        command = ["/usr/local/bin/stripe", "-r", filepath, "-w", new_filepath]
+
+        subprocess.call(command)
+
+        return new_filepath
 
     def start(self):
         self._register_update_callback(self.update_suricata, execute_now=True, utype=UpdaterType.BOX,
@@ -64,6 +74,7 @@ class Suricata(ServiceBase):
     def stop(self):
         self.kill_suricata()
 
+    # Kill the process if it isn't ending
     def kill_suricata(self):
         if self.suricata_process:
             try:
@@ -72,6 +83,7 @@ class Suricata(ServiceBase):
             except Exception as e:
                 self.log.exception("Failed to kill Suricata (%s): %s" % (str(self.suricata_process.pid), e.message))
 
+    # Reapply our service configuration to the Suricata yaml configuration
     def replace_suricata_config(self):
         shutil.copyfile(os.path.join(self.source_directory, 'conf', 'suricata.yaml'),
                         os.path.join(self.working_directory, 'suricata.yaml'))
@@ -91,8 +103,7 @@ class Suricata(ServiceBase):
         if self.last_rule_update < self.get_tool_version():
             self.reload_rules()
 
-            # Send the reload_rules command to the socket
-
+    # Send the reload_rules command to the socket
     def reload_rules(self):
         ret = self.suricata_sc.send_command("reload-rules")
 
@@ -135,7 +146,7 @@ class Suricata(ServiceBase):
 
         self.suricata_sc = suricatasc.SuricataSC(os.path.join('/var/run/suricata', self.suricata_socket))
 
-        # Schedule a job to delete the scoket when it isn't needed any longer
+        # Schedule a job to delete the socket when it isn't needed any longer
         self._register_cleanup_op(
             {
                 'type': 'shell',
@@ -154,7 +165,7 @@ class Suricata(ServiceBase):
         import dateutil.parser as dateparser
 
     def execute(self, request):
-        filepath = request.download()
+        file_path = request.download()
         result = Result()
 
         # restart Suricata if we need to
@@ -163,16 +174,19 @@ class Suricata(ServiceBase):
         # Update our rules if they're stale,
         self.reload_rules_if_necessary()
 
+        # Strip frame headers from the PCAP, since Suricata sometimes has trouble parsing strange PCAPs
+        stripped_filepath = self.strip_frame_headers(file_path)
+
         # Pass the pcap file to Suricata via the socket
         ret = self.suricata_sc.send_command("pcap-file", {
-            "filename": filepath,
+            "filename": stripped_filepath,
             "output-dir": self.working_directory
         })
 
         if not ret or ret["return"] != "OK":
             self.log.exception("Failed to submit PCAP for processing: %s" % ret['message'])
 
-        # Wait for the socket to be finished processing
+        # Wait for the socket finish processing our PCAP
         while True:
             time.sleep(1)
             ret = self.suricata_sc.send_command("pcap-current")
@@ -231,5 +245,9 @@ class Suricata(ServiceBase):
 
             # Add the original Suricata output as a supplementary file in the result
             request.add_supplementary(os.path.join(self.working_directory, 'eve.json'), 'json', 'SuricataEventLog.json')
+
+        # Add the stats.log to the result, which can be used to determine service success
+        if os.path.exists(os.path.join(self.working_directory, 'stats.log')):
+            request.add_supplementary(os.path.join(self.working_directory, 'stats.log'), 'log', 'stats.log')
 
         request.result = result
