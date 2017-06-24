@@ -66,6 +66,8 @@ outputs:
       filename: eve.json
       types:
         - alert
+        - http
+        - dns
 
   # a line based alerts log similar to Snort's fast.log
   - fast:

@@ -196,25 +196,48 @@ class Suricata(ServiceBase):
 
         alerts = {}
         signatures = {}
+        domains = []
+        ips = []
+        urls = []
 
         # Parse the json results of the service
         for line in open(os.path.join(self.working_directory, 'eve.json')):
-            alert = json.loads(line)
+            record = json.loads(line)
 
-            timestamp = dateparser.parse(alert['timestamp']).isoformat(' ')
-            signature_id = alert['alert']['signature_id']
-            signature = alert['alert']['signature']
-            src_ip = alert['src_ip']
-            src_port = alert['src_port']
-            dest_ip = alert['dest_ip']
-            dest_port = alert['dest_port']
+            timestamp = dateparser.parse(record['timestamp']).isoformat(' ')
+            src_ip = record['src_ip']
+            src_port = record['src_port']
+            dest_ip = record['dest_ip']
+            dest_port = record['dest_port']
 
-            if signature_id not in alerts:
-                alerts[signature_id] = []
-            if signature_id not in signatures:
-                signatures[signature_id] = signature
+            if src_ip not in ips:
+                ips.append(src_ip)
+            if dest_ip not in ips:
+                ips.append(dest_ip)
 
-            alerts[signature_id].append("%s %s:%s -> %s:%s" % (timestamp, src_ip, src_port, dest_ip, dest_port))
+            if record['event_type'] == 'http':
+                domain = record['http']['hostname']
+                if domain not in domains and domain not in ips:
+                    domains.append(domain)
+                url = "http://" + domain + record['http']['url']
+                if url not in urls:
+                    urls.append(url)
+
+            if record['event_type'] == 'dns':
+                domain = record['dns']['rrname']
+                if domain not in domains and domain not in ips:
+                    domains.append(domain)
+
+            if record['event_type'] == 'alert':
+                signature_id = record['alert']['signature_id']
+                signature = record['alert']['signature']
+
+                if signature_id not in alerts:
+                    alerts[signature_id] = []
+                if signature_id not in signatures:
+                    signatures[signature_id] = signature
+
+                alerts[signature_id].append("%s %s:%s -> %s:%s" % (timestamp, src_ip, src_port, dest_ip, dest_port))
 
         # Create the result sections if there are any hits
         if len(alerts) > 0:
@@ -237,11 +260,19 @@ class Suricata(ServiceBase):
                     section.add_line('And %s more flows' % (len(alerts[signature_id]) - 10))
                 result.add_section(section)
 
-                # add a tag for the signature id and the message
+                # Add a tag for the signature id and the message
                 result.add_tag(TAG_TYPE.SURICATA_SIGNATURE_ID, str(signature_id), tag_weight,
                                usage=TAG_USAGE.IDENTIFICATION)
                 result.add_tag(TAG_TYPE.SURICATA_SIGNATURE_MESSAGE, signature, tag_weight,
                                usage=TAG_USAGE.IDENTIFICATION)
+
+            # Add tags for the domains, urls, and IPs we've discovered
+            for domain in domains:
+                result.add_tag(TAG_TYPE.NET_DOMAIN_NAME, domain, TAG_WEIGHT.VHIGH, usage=TAG_USAGE.CORRELATION)
+            for url in urls:
+                result.add_tag(TAG_TYPE.NET_FULL_URI, url, TAG_WEIGHT.VHIGH, usage=TAG_USAGE.CORRELATION)
+            for ip in ips:
+                result.add_tag(TAG_TYPE.NET_IP, ip, TAG_WEIGHT.VHIGH, usage=TAG_USAGE.CORRELATION)
 
             # Add the original Suricata output as a supplementary file in the result
             request.add_supplementary(os.path.join(self.working_directory, 'eve.json'), 'json', 'SuricataEventLog.json')
