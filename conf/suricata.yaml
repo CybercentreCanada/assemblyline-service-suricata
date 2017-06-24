@@ -156,7 +156,7 @@ outputs:
   # The interval field (in seconds) tells after how long output will be written
   # on the log file.
   - stats:
-      enabled: no
+      enabled: yes
       filename: stats.log
       interval: 8
 
@@ -726,13 +726,19 @@ default-rule-path: /etc/suricata/rules/
 rule-files:
 
 #Malware/trojan oriented rules
- - trojan.rules 
+ - trojan.rules
  - malware.rules
  - mobile_malware.rules
- - worm.rules 
- - user_agents.rules 
+ - worm.rules
+ - user_agents.rules
  - current_events.rules
- 
+ - emerging-trojan.rules
+ - emerging-malware.rules
+ - emerging-mobile_malware.rules
+ - emerging-worm.rules
+ - emerging-user_agents.rules
+ - emerging-current_events.rules
+
 #important but relatively low load rules you'll likely want to keep on
  - ftp.rules
  - pop3.rules
@@ -740,44 +746,65 @@ rule-files:
  - attack_response.rules
 # - icmp.rules
  - scan.rules
- - voip.rules 
+ - voip.rules
  - imap.rules
- - web_server.rules 
+ - web_server.rules
  - smtp.rules
  - dns.rules
  - misc.rules
  - snmp.rules
- - sql.rules                 
+ - sql.rules
  - dos.rules
- - telnet.rules              
+ - telnet.rules
  - exploit.rules
- - tftp.rules  
+ - tftp.rules
  - http-events.rules
  - smtp-events.rules
-
+ - emerging-ftp.rules
+ - emerging-pop3.rules
+ - emerging-rpc.rules
+ - emerging-attack_response.rules
+ - emerging-scan.rules
+ - emerging-voip.rules
+ - emerging-imap.rules
+ - emerging-web_server.rules
+ - emerging-smtp.rules
+ - emerging-dns.rules
+ - emerging-misc.rules
+ - emerging-snmp.rules
+ - emerging-sql.rules
+ - emerging-dos.rules
+ - emerging-telnet.rules
+ - emerging-exploit.rules
+ - emerging-tftp.rules
+ - emerging-http-events.rules
+ - emerging-smtp-events.rules
 #useful but often high load rules. Look here for performance tuning
- - web_client.rules 
- - netbios.rules
+ - emerging-web_client.rules
+ - emerging-netbios.rules
 
 #things you'll want to look through and consider policy needs
  - policy.rules
-# - games.rules
+ - games.rules
  - p2p.rules
  - chat.rules
-# - decoder-events.rules
-# - stream-events.rules
- #- dns-events.rules
-# - app-layer-events.rules
-# - modbus-events.rules 
-# - tls-events.rules
+ - decoder-events.rules
+ - stream-events.rules
+ - dns-events.rules
+ - app-layer-events.rules
+ - modbus-events.rules
+ - tls-events.rules
+ - emerging-policy.rules
+ - emerging-p2p.rules
+ - emerging-chat.rules
 
 #informational, not recommended for high speed nets
-# - icmp_info.rules
-# - info.rules
-# - shellcode.rules
-# - inappropriate.rules
-# - web_specific_apps.rules 
-# - activex.rules
+ - icmp_info.rules
+ - info.rules
+ - shellcode.rules
+ - inappropriate.rules
+ - web_specific_apps.rules
+ - activex.rules
 
 
 #ip based rules
@@ -787,10 +814,16 @@ rule-files:
  - drop.rules
  - dshield.rules
  - tor.rules
+ - emerging-botcc.rules
+ - emerging-ciarmy.rules
+ - emerging-compromised.rules
+ - emerging-drop.rules
+ - emerging-dshield.rules
+ - emerging-tor.rules
 
 #only use the scada_special if you have the scada extensions compiled int
 # - scada_special.rules
-# - scada.rules
+ - scada.rules
 
 classification-file: /etc/suricata/rules/classification.config
 reference-config-file: /etc/suricata/rules/reference.config
