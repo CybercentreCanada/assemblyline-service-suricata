@@ -18,7 +18,7 @@ class Suricata(ServiceBase):
     SERVICE_CATEGORY = 'Networking'
     SERVICE_ENABLED = True
     SERVICE_STAGE = "CORE"
-    SERVICE_REVISION = ServiceBase.parse_revision('$Id: 2021d906006158b7d4afbfadaf24f809e1573b56 $')
+    SERVICE_REVISION = ServiceBase.parse_revision('$Id$')
     SERVICE_TIMEOUT = 60
     SERVICE_VERSION = '1'
     SERVICE_CPU_CORES = 1
@@ -29,7 +29,7 @@ class Suricata(ServiceBase):
         "SURICATA_CONFIG": "/etc/suricata/suricata.yaml",
         "SURE_SCORE": "MALWARE TROJAN CURRENT_EVENTS CnC Checkin",
         "VHIGH_SCORE": "EXPLOIT SCAN Adware PUP",
-        "RULES_URL": "http://rules.emergingthreats.net/open/suricata/emerging.rules.tar.gz",
+        "RULES_URLS": ["http://rules.emergingthreats.net/open/suricata/emerging.rules.tar.gz"],
         "HOME_NET": "any"
     }
 
@@ -39,13 +39,26 @@ class Suricata(ServiceBase):
         self.suricata_sc = None
         self.suricata_process = None
         self.last_rule_update = None
-        self.rules_url = cfg.get("RULES_URL", self.SERVICE_DEFAULT_CONFIG["RULES_URL"])
+        self.rules_urls = cfg.get("RULES_URLS", self.SERVICE_DEFAULT_CONFIG["RULES_URLS"])
         self.home_net = cfg.get("HOME_NET", self.SERVICE_DEFAULT_CONFIG["HOME_NET"])
         self.oinkmaster_update_file = '/etc/suricata/oinkmaster'
 
+    # Update our local rules using Oinkmaster
     def update_suricata(self, **_):
-        subprocess.call(["/usr/sbin/oinkmaster",  "-Q", "-u", self.rules_url, "-o", "/etc/suricata/rules"])
+        command = ["/usr/sbin/oinkmaster",  "-Q", "-o", "/etc/suricata/rules"]
+        for rules_url in self.rules_urls:
+            command.extend(["-u", rules_url])
+        subprocess.call(command)
         subprocess.call(["touch", self.oinkmaster_update_file])
+
+    # Use an external tool to strip frame headers
+    def strip_frame_headers(self, filepath):
+        new_filepath = os.path.join(os.path.dirname(filepath), "striped.pcap")
+        command = ["/usr/local/bin/stripe", "-r", filepath, "-w", new_filepath]
+
+        subprocess.call(command)
+
+        return new_filepath
 
     def start(self):
         self._register_update_callback(self.update_suricata, execute_now=True, utype=UpdaterType.BOX,
@@ -61,6 +74,7 @@ class Suricata(ServiceBase):
     def stop(self):
         self.kill_suricata()
 
+    # Kill the process if it isn't ending
     def kill_suricata(self):
         if self.suricata_process:
             try:
@@ -69,6 +83,7 @@ class Suricata(ServiceBase):
             except Exception as e:
                 self.log.exception("Failed to kill Suricata (%s): %s" % (str(self.suricata_process.pid), e.message))
 
+    # Reapply our service configuration to the Suricata yaml configuration
     def replace_suricata_config(self):
         shutil.copyfile(os.path.join(self.source_directory, 'conf', 'suricata.yaml'),
                         os.path.join(self.working_directory, 'suricata.yaml'))
@@ -88,8 +103,7 @@ class Suricata(ServiceBase):
         if self.last_rule_update < self.get_tool_version():
             self.reload_rules()
 
-            # Send the reload_rules command to the socket
-
+    # Send the reload_rules command to the socket
     def reload_rules(self):
         ret = self.suricata_sc.send_command("reload-rules")
 
@@ -132,7 +146,7 @@ class Suricata(ServiceBase):
 
         self.suricata_sc = suricatasc.SuricataSC(os.path.join('/var/run/suricata', self.suricata_socket))
 
-        # Schedule a job to delete the scoket when it isn't needed any longer
+        # Schedule a job to delete the socket when it isn't needed any longer
         self._register_cleanup_op(
             {
                 'type': 'shell',
@@ -151,7 +165,7 @@ class Suricata(ServiceBase):
         import dateutil.parser as dateparser
 
     def execute(self, request):
-        filepath = request.download()
+        file_path = request.download()
         result = Result()
 
         # restart Suricata if we need to
@@ -160,16 +174,19 @@ class Suricata(ServiceBase):
         # Update our rules if they're stale,
         self.reload_rules_if_necessary()
 
+        # Strip frame headers from the PCAP, since Suricata sometimes has trouble parsing strange PCAPs
+        stripped_filepath = self.strip_frame_headers(file_path)
+
         # Pass the pcap file to Suricata via the socket
         ret = self.suricata_sc.send_command("pcap-file", {
-            "filename": filepath,
+            "filename": stripped_filepath,
             "output-dir": self.working_directory
         })
 
         if not ret or ret["return"] != "OK":
             self.log.exception("Failed to submit PCAP for processing: %s" % ret['message'])
 
-        # Wait for the socket to be finished processing
+        # Wait for the socket finish processing our PCAP
         while True:
             time.sleep(1)
             ret = self.suricata_sc.send_command("pcap-current")
@@ -179,25 +196,48 @@ class Suricata(ServiceBase):
 
         alerts = {}
         signatures = {}
+        domains = []
+        ips = []
+        urls = []
 
         # Parse the json results of the service
         for line in open(os.path.join(self.working_directory, 'eve.json')):
-            alert = json.loads(line)
+            record = json.loads(line)
 
-            timestamp = dateparser.parse(alert['timestamp']).isoformat(' ')
-            signature_id = alert['alert']['signature_id']
-            signature = alert['alert']['signature']
-            src_ip = alert['src_ip']
-            src_port = alert['src_port']
-            dest_ip = alert['dest_ip']
-            dest_port = alert['dest_port']
+            timestamp = dateparser.parse(record['timestamp']).isoformat(' ')
+            src_ip = record['src_ip']
+            src_port = record['src_port']
+            dest_ip = record['dest_ip']
+            dest_port = record['dest_port']
 
-            if signature_id not in alerts:
-                alerts[signature_id] = []
-            if signature_id not in signatures:
-                signatures[signature_id] = signature
+            if src_ip not in ips:
+                ips.append(src_ip)
+            if dest_ip not in ips:
+                ips.append(dest_ip)
 
-            alerts[signature_id].append("%s %s:%s -> %s:%s" % (timestamp, src_ip, src_port, dest_ip, dest_port))
+            if record['event_type'] == 'http':
+                domain = record['http']['hostname']
+                if domain not in domains and domain not in ips:
+                    domains.append(domain)
+                url = "http://" + domain + record['http']['url']
+                if url not in urls:
+                    urls.append(url)
+
+            if record['event_type'] == 'dns':
+                domain = record['dns']['rrname']
+                if domain not in domains and domain not in ips:
+                    domains.append(domain)
+
+            if record['event_type'] == 'alert':
+                signature_id = record['alert']['signature_id']
+                signature = record['alert']['signature']
+
+                if signature_id not in alerts:
+                    alerts[signature_id] = []
+                if signature_id not in signatures:
+                    signatures[signature_id] = signature
+
+                alerts[signature_id].append("%s %s:%s -> %s:%s" % (timestamp, src_ip, src_port, dest_ip, dest_port))
 
         # Create the result sections if there are any hits
         if len(alerts) > 0:
@@ -220,13 +260,25 @@ class Suricata(ServiceBase):
                     section.add_line('And %s more flows' % (len(alerts[signature_id]) - 10))
                 result.add_section(section)
 
-                # add a tag for the signature id and the message
+                # Add a tag for the signature id and the message
                 result.add_tag(TAG_TYPE.SURICATA_SIGNATURE_ID, str(signature_id), tag_weight,
                                usage=TAG_USAGE.IDENTIFICATION)
                 result.add_tag(TAG_TYPE.SURICATA_SIGNATURE_MESSAGE, signature, tag_weight,
                                usage=TAG_USAGE.IDENTIFICATION)
 
+            # Add tags for the domains, urls, and IPs we've discovered
+            for domain in domains:
+                result.add_tag(TAG_TYPE.NET_DOMAIN_NAME, domain, TAG_WEIGHT.VHIGH, usage=TAG_USAGE.CORRELATION)
+            for url in urls:
+                result.add_tag(TAG_TYPE.NET_FULL_URI, url, TAG_WEIGHT.VHIGH, usage=TAG_USAGE.CORRELATION)
+            for ip in ips:
+                result.add_tag(TAG_TYPE.NET_IP, ip, TAG_WEIGHT.VHIGH, usage=TAG_USAGE.CORRELATION)
+
             # Add the original Suricata output as a supplementary file in the result
             request.add_supplementary(os.path.join(self.working_directory, 'eve.json'), 'json', 'SuricataEventLog.json')
+
+        # Add the stats.log to the result, which can be used to determine service success
+        if os.path.exists(os.path.join(self.working_directory, 'stats.log')):
+            request.add_supplementary(os.path.join(self.working_directory, 'stats.log'), 'log', 'stats.log')
 
         request.result = result
