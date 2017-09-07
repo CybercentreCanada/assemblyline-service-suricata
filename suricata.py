@@ -96,7 +96,7 @@ class Suricata(ServiceBase):
         dest_path = os.path.join(self.run_dir, 'suricata.yaml')
         home_net = re.sub(r"([/\[\]])", r"\\\1", self.home_net)
         with open(source_path) as sp:
-            with open(dest_path) as dp:
+            with open(dest_path, "w") as dp:
                 dp.write(sp.read().replace("__HOME_NET__", home_net))
 
     def reload_rules_if_necessary(self):
@@ -132,27 +132,26 @@ class Suricata(ServiceBase):
 
     # Launch Suricata using a UID socket
     def launch_suricata(self):
-        self.suricata_socket = str(uuid.uuid4()) + '.socket'
+        self.suricata_socket = os.path.join(self.run_dir, str(uuid.uuid4()) + '.socket')
 
         command = [
             self.cfg.get('SURICATA_BIN'),
             "-c", os.path.join(self.run_dir, 'suricata.yaml'),
             "--unix-socket=%s" % self.suricata_socket,
             "--pidfile", "%s/suricata.pid" % self.run_dir,
-
         ]
 
         self.log.info('Launching Suricata: %s' % (' '.join(command)))
 
         self.suricata_process = subprocess.Popen(command)
 
-        self.suricata_sc = suricatasc.SuricataSC(os.path.join(self.run_dir, self.suricata_socket))
+        self.suricata_sc = suricatasc.SuricataSC(self.suricata_socket)
 
         # Schedule a job to delete the socket when it isn't needed any longer
         self._register_cleanup_op(
             {
                 'type': 'shell',
-                'args': ["rm", os.path.join(self.run_dir, self.suricata_socket)]
+                'args': ["rm", "-rf", self.run_dir]
             }
         )
 
@@ -218,6 +217,9 @@ class Suricata(ServiceBase):
                 ips.append(dest_ip)
 
             if record['event_type'] == 'http':
+                if 'hostname' not in record['http'] or 'url' not in record['http']:
+                    continue
+
                 domain = record['http']['hostname']
                 if domain not in domains and domain not in ips:
                     domains.append(domain)
@@ -226,11 +228,15 @@ class Suricata(ServiceBase):
                     urls.append(url)
 
             if record['event_type'] == 'dns':
+                if 'rrname' not in record['dns']:
+                    continue
                 domain = record['dns']['rrname']
                 if domain not in domains and domain not in ips:
                     domains.append(domain)
 
             if record['event_type'] == 'alert':
+                if 'signature_id' not in record['alert'] or 'signature' not in record['alert']:
+                    continue
                 signature_id = record['alert']['signature_id']
                 signature = record['alert']['signature']
 
