@@ -4,6 +4,8 @@ import shutil
 import subprocess
 import time
 import uuid
+import tempfile
+import re
 
 from retrying import retry
 from assemblyline.al.common.result import Result, ResultSection, SCORE, TAG_TYPE, TAG_WEIGHT, TAG_USAGE
@@ -26,7 +28,6 @@ class Suricata(ServiceBase):
 
     SERVICE_DEFAULT_CONFIG = {
         "SURICATA_BIN": "/usr/local/bin/suricata",
-        "SURICATA_CONFIG": "/etc/suricata/suricata.yaml",
         "SURE_SCORE": "MALWARE TROJAN CURRENT_EVENTS CnC Checkin",
         "VHIGH_SCORE": "EXPLOIT SCAN Adware PUP",
         "RULES_URLS": ["http://rules.emergingthreats.net/open/suricata/emerging.rules.tar.gz"],
@@ -42,6 +43,7 @@ class Suricata(ServiceBase):
         self.rules_urls = cfg.get("RULES_URLS", self.SERVICE_DEFAULT_CONFIG["RULES_URLS"])
         self.home_net = cfg.get("HOME_NET", self.SERVICE_DEFAULT_CONFIG["HOME_NET"])
         self.oinkmaster_update_file = '/etc/suricata/oinkmaster'
+        self.run_dir = None
 
     # Update our local rules using Oinkmaster
     def update_suricata(self, **_):
@@ -61,6 +63,7 @@ class Suricata(ServiceBase):
         return new_filepath
 
     def start(self):
+        self.run_dir = tempfile.mkdtemp(dir="/tmp")
         self._register_update_callback(self.update_suricata, execute_now=True, utype=UpdaterType.BOX,
                                        freq=UpdaterFrequency.QUARTER_DAY)
         self.replace_suricata_config()
@@ -73,6 +76,10 @@ class Suricata(ServiceBase):
     # When we're shutting down, kill the Suricata child process as well
     def stop(self):
         self.kill_suricata()
+        if self.run_dir is not None:
+            if os.path.exists(self.run_dir):
+                shutil.rmtree(self.run_dir)
+            self.run_dir = None
 
     # Kill the process if it isn't ending
     def kill_suricata(self):
@@ -85,19 +92,12 @@ class Suricata(ServiceBase):
 
     # Reapply our service configuration to the Suricata yaml configuration
     def replace_suricata_config(self):
-        shutil.copyfile(os.path.join(self.source_directory, 'conf', 'suricata.yaml'),
-                        os.path.join(self.working_directory, 'suricata.yaml'))
-
-        command = [
-            '/bin/sed',
-            '-i', '-e',
-            's/__HOME_NET__/' + self.home_net.replace('/', '\/').replace('[', '\[').replace(']', '\]') + '/g',
-            os.path.join(self.working_directory, 'suricata.yaml')
-        ]
-        p = subprocess.Popen(command)
-        p.communicate()
-
-        os.rename(os.path.join(self.working_directory, 'suricata.yaml'), '/etc/suricata/suricata.yaml')
+        source_path = os.path.join(self.source_directory, 'conf', 'suricata.yaml')
+        dest_path = os.path.join(self.run_dir, 'suricata.yaml')
+        home_net = re.sub(r"([/\[\]])", r"\\\1", self.home_net)
+        with open(source_path) as sp:
+            with open(dest_path) as dp:
+                dp.write(sp.read().replace("__HOME_NET__", home_net))
 
     def reload_rules_if_necessary(self):
         if self.last_rule_update < self.get_tool_version():
@@ -136,21 +136,23 @@ class Suricata(ServiceBase):
 
         command = [
             self.cfg.get('SURICATA_BIN'),
-            "-c", self.cfg.get('SURICATA_CONFIG'),
-            '--unix-socket=' + self.suricata_socket
+            "-c", os.path.join(self.run_dir, 'suricata.yaml'),
+            "--unix-socket=%s" % self.suricata_socket,
+            "--pidfile", "%s/suricata.pid" % self.run_dir,
+
         ]
 
         self.log.info('Launching Suricata: %s' % (' '.join(command)))
 
         self.suricata_process = subprocess.Popen(command)
 
-        self.suricata_sc = suricatasc.SuricataSC(os.path.join('/var/run/suricata', self.suricata_socket))
+        self.suricata_sc = suricatasc.SuricataSC(os.path.join(self.run_dir, self.suricata_socket))
 
         # Schedule a job to delete the socket when it isn't needed any longer
         self._register_cleanup_op(
             {
                 'type': 'shell',
-                'args': ["rm", os.path.join("/var/run/suricata/", self.suricata_socket)]
+                'args': ["rm", os.path.join(self.run_dir, self.suricata_socket)]
             }
         )
 
