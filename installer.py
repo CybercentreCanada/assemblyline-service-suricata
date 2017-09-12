@@ -31,7 +31,6 @@ def install(alsi):
     alsi.pip_install_all(['simplejson', 'python-dateutil'])
 
     directories = [
-        '/var/run/suricata',
         '/etc/suricata',
         '/etc/suricata/rules',
         '/var/log/suricata'
