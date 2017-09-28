@@ -154,6 +154,14 @@ class Suricata(ServiceBase):
                 'args': ["rm", "-rf", self.run_dir]
             }
         )
+        # Note, in case the process is terminated without calling stop()
+        self._register_cleanup_op(
+            {
+                'type': 'shell',
+                'args': ["pkill", "--SIGKILL", "--nslist", "pid", "--ns", str(self.suricata_process.pid), "-f",
+                         self.cfg.get('SURICATA_BIN')]
+            }
+        )
 
         if not self.suricata_running_retry():
             raise Exception('Suricata could not be started.')
