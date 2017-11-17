@@ -30,7 +30,7 @@ class Suricata(ServiceBase):
         "SURICATA_BIN": "/usr/local/bin/suricata",
         "SURE_SCORE": "MALWARE TROJAN CURRENT_EVENTS CnC Checkin",
         "VHIGH_SCORE": "EXPLOIT SCAN Adware PUP",
-        "RULES_URLS": ["http://rules.emergingthreats.net/open/suricata/emerging.rules.tar.gz"],
+        "RULES_URLS": ["https://rules.emergingthreats.net/open/suricata/emerging.rules.tar.gz"],
         "HOME_NET": "any"
     }
 
