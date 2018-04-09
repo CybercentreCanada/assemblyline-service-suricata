@@ -8,31 +8,27 @@ import os
 # sudo apt-get update
 # Then to download packages to upload separately to s3
 # sudo apt-get install -d -o=dir::cache=/tmp suricata
+# As far as I can tell, you should only need the libhtp2 and suricata .deb files
+
 
 def install(alsi):
-    alsi.sudo_apt_install([
-        'oinkmaster',
-        'libpcre3',
-        'libpcre3-dbg',
-        'libpcre3-dev',
-        'build-essential',
-        'autoconf',
-        'automake',
-        'libtool',
-        'libpcap-dev',
-        'libnet1-dev',
-        'libyaml-0-2',
-        'libyaml-dev',
-        'zlib1g',
-        'zlib1g-dev',
-        'libcap-ng-dev',
-        'libcap-ng0',
-        'make',
-        'libmagic-dev',
-        'libjansson-dev',
-        'libjansson4',
-        'pkg-config'
-    ])
+
+    # .deb packages to manually install
+    deb_pkgs = ["libhtp2_1%3a0.5.26-2ubuntu3_amd64.deb", "suricata_4.0.4-2ubuntu3_amd64.deb"]
+
+    # pull them down first
+    for deb_pkg in deb_pkgs:
+        alsi.fetch_package(os.path.join("suricata/", deb_pkg),
+                           os.path.join("/tmp/", deb_pkg))
+
+    local_paths = [os.path.join("/tmp/", deb_pkg) for deb_pkg in deb_pkgs]
+
+    # now install them
+    alsi.sudo_apt_install(local_paths)
+
+    # clean up
+    for deb_pkg in local_paths:
+        alsi.runcmd('sudo rm -rf %s' % deb_pkg)
 
     alsi.pip_install_all(['simplejson', 'python-dateutil'])
 
@@ -41,21 +37,6 @@ def install(alsi):
         '/etc/suricata/rules',
         '/var/log/suricata'
     ]
-
-    if not os.path.exists("/usr/local/bin/suricata"):
-        src = 'suricata-3.1.2.tar.gz'
-        remote_path = os.path.join('suricata/' + src)
-        local_path = os.path.join('/tmp/', src)
-
-        # Grab Suricata from the package repo
-        alsi.fetch_package(remote_path, local_path)
-
-        # Configure and build Suricata
-        alsi.runcmd('sudo tar -C /tmp/ -xzf ' + local_path)
-        src_path = local_path[:-7]
-        alsi.runcmd('cd %s && sudo ./configure --prefix=/usr/local/ --sysconfdir=/etc/ --localstatedir=/var/ '
-                   '&& sudo make -C %s && sudo make -C %s install && sudo ldconfig' % (src_path, src_path, src_path))
-        alsi.runcmd('sudo rm -rf %s %s' % (src_path, local_path))
 
     # Create directories
     for directory in directories:
@@ -90,6 +71,7 @@ def install(alsi):
         stripe_path = os.path.join(alsi.alroot, 'pkg', 'al_services', 'alsvc_suricata', "stripe")
         alsi.runcmd('/usr/bin/gcc -o %s %s' % (os.path.join(stripe_path, 'stripe'), os.path.join(stripe_path, 'stripe.c')))
         alsi.runcmd('sudo cp %s %s' % (os.path.join(stripe_path, 'stripe'), '/usr/local/bin/stripe'))
+
 
 if __name__ == '__main__':
     from assemblyline.al.install import SiteInstaller
