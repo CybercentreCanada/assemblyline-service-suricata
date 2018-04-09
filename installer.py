@@ -2,6 +2,12 @@
 
 import os
 
+# install using PPA built packages
+# On internet connected machine:
+# sudo add-apt-repository ppa:oisf/suricata-stable
+# sudo apt-get update
+# Then to download packages to upload separately to s3
+# sudo apt-get install -d -o=dir::cache=/tmp suricata
 
 def install(alsi):
     alsi.sudo_apt_install([
