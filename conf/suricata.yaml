@@ -68,6 +68,7 @@ outputs:
         - alert
         - http
         - dns
+        - files
 
   # a line based alerts log similar to Snort's fast.log
   - fast:
@@ -190,11 +191,13 @@ outputs:
   # - http request / response body sizes. Again set to 0 for optimal results.
   # - rules that contain the "filestore" keyword.
   - file-store:
-      enabled: no       # set to yes to enable
+      version: 2
+      enabled: yes       # set to yes to enable
       log-dir: files    # directory to store the files
-      force-magic: no   # force logging magic on all stored files
-      force-md5: no     # force logging of md5 checksums
-      #waldo: file.waldo # waldo file to store the file_id across runs
+      #write-fileinfo: yes
+      force-filestore: yes
+      stream-depth: 0
+
 
   # output module to log files tracked in a easily parsable json format
   - file-log:
