@@ -34,6 +34,18 @@ class Suricata(ServiceBase):
         "HOME_NET": "any"
     }
 
+    # make file extraction an option
+    # The suricata process will still extract the files, but unless this is True, we won't add any
+    # files as "extracted"
+    SERVICE_DEFAULT_SUBMISSION_PARAMS = [
+        {
+            "default": False,
+            "name": "extract_files",
+            "type": "bool",
+            "value": False,
+        }
+    ]
+
     def __init__(self, cfg=None):
         super(Suricata, self).__init__(cfg)
         self.suricata_socket = None
@@ -209,6 +221,8 @@ class Suricata(ServiceBase):
         ips = []
         urls = []
 
+        file_extracted_reported = False
+
         # Parse the json results of the service
         for line in open(os.path.join(self.working_directory, 'eve.json')):
             record = json.loads(line)
@@ -256,13 +270,22 @@ class Suricata(ServiceBase):
                 alerts[signature_id].append("%s %s:%s -> %s:%s" % (timestamp, src_ip, src_port, dest_ip, dest_port))
 
             # Check to see if any files were extracted
-            if record["event_type"] == "fileinfo":
+            if request.get_param("extract_files") and record["event_type"] == "fileinfo":
                 filename = record["fileinfo"]["filename"]
                 extracted_file_path = os.path.join(self.working_directory, 'files', 'file.%d' % record["fileinfo"]["file_id"])
 
                 self.log.info("extracted file %s" % filename)
 
                 request.add_extracted(extracted_file_path, "Extracted by suricata", display_name=filename)
+
+                # Report a null score to indicate that files were extracted. If no sigs hit, it's not clear
+                # where the extracted files came from
+                if not file_extracted_reported:
+                    file_extracted_reported = True
+                    section = ResultSection(SCORE.NULL, "Files extracted by suricata")
+                    result.add_section(section)
+
+
 
         # Create the result sections if there are any hits
         if len(alerts) > 0:
