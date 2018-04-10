@@ -1,1 +1,9 @@
 This file downloaded from https://wiki.wireshark.org/SampleCaptures
+
+Dumps one attachment, simple text file
+
+al@ip-172-31-15-143:~/pkg/al_services/alsvc_suricata/testing$ ls /var/log/suricata/files
+file.1  file.1.meta
+al@ip-172-31-15-143:~/pkg/al_services/alsvc_suricata/testing$ sha256sum /var/log/suricata/files/*
+67eb209fbbcc386af4757d6275f92de3917d82e0f8e13fb135e64ac4fd07d93c  /var/log/suricata/files/file.1
+00d1fdceeb947ebb92ab6020f91093adcc9a374dbdb509fb3b5716ebe8dfe3e8  /var/log/suricata/files/file.1.meta
