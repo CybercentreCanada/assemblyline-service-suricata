@@ -590,7 +590,7 @@ flow-timeouts:
 
 stream:
   memcap: 1gb
-  checksum-validation: yes      # reject wrong csums
+  checksum-validation: no      # reject wrong csums
   max-sessions: 2000000
   prealloc-sessions: 1000000
   inline: no                    # no inline mode
@@ -639,12 +639,12 @@ logging:
   # disabled you will get the default - console output.
   outputs:
   - console:
-      enabled: no
+      enabled: yes
   - file:
       enabled: no
-      filename: /var/log/suricata.log
+      filename: /var/log/suricata/suricata.log
   - syslog:
-      enabled: yes
+      enabled: no
       facility: local5
       format: "[%i] <%d> -- "
 

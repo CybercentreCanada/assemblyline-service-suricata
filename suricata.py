@@ -22,12 +22,12 @@ class Suricata(ServiceBase):
     SERVICE_STAGE = "CORE"
     SERVICE_REVISION = ServiceBase.parse_revision('$Id$')
     SERVICE_TIMEOUT = 60
-    SERVICE_VERSION = '1'
+    SERVICE_VERSION = '2'
     SERVICE_CPU_CORES = 1
     SERVICE_RAM_MB = 1024
 
     SERVICE_DEFAULT_CONFIG = {
-        "SURICATA_BIN": "/usr/local/bin/suricata",
+        "SURICATA_BIN": "/usr/bin/suricata",
         "SURE_SCORE": "MALWARE TROJAN CURRENT_EVENTS CnC Checkin",
         "VHIGH_SCORE": "EXPLOIT SCAN Adware PUP",
         "RULES_URLS": ["https://rules.emergingthreats.net/open/suricata/emerging.rules.tar.gz"],
@@ -254,6 +254,15 @@ class Suricata(ServiceBase):
                     signatures[signature_id] = signature
 
                 alerts[signature_id].append("%s %s:%s -> %s:%s" % (timestamp, src_ip, src_port, dest_ip, dest_port))
+
+            # Check to see if any files were extracted
+            if record["event_type"] == "fileinfo":
+                filename = record["fileinfo"]["filename"]
+                extracted_file_path = os.path.join(self.working_directory, 'files', 'file.%d' % record["fileinfo"]["file_id"])
+
+                self.log.info("extracted file %s" % filename)
+
+                request.add_extracted(extracted_file_path, "Extracted by suricata", display_name=filename)
 
         # Create the result sections if there are any hits
         if len(alerts) > 0:
