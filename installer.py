@@ -25,6 +25,10 @@ def install(alsi):
     elif ubt_version == "16.04":
         deb_pkgs = deb_pkgs_ubt16
 
+    # Check if suricata is already installed
+    # c = alsi.runcmd("dpkg -l | grep suricata | grep ii | cat")
+    
+
     # pull them down first
     for deb_pkg in deb_pkgs:
         alsi.fetch_package(os.path.join("suricata/", deb_pkg),
@@ -39,7 +43,7 @@ def install(alsi):
     # disable the service and make sure it's not running
     if ubt_version == "14.04":
         alsi.runcmd("sudo service suricata stop")
-        alsi.runcmd("sudo update-rc.d suricata disable")
+        alsi.runcmd("sudo update-rc.d -f suricata remove")
     elif ubt_version == "16.04":
         alsi.runcmd("sudo systemctl disable suricata")
         alsi.runcmd("sudo systemctl stop suricata")
