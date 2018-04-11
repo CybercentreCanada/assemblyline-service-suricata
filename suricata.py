@@ -35,14 +35,12 @@ class Suricata(ServiceBase):
     }
 
     # make file extraction an option
-    # The suricata process will still extract the files, but unless this is True, we won't add any
-    # files as "extracted"
     SERVICE_DEFAULT_SUBMISSION_PARAMS = [
         {
-            "default": False,
+            "default": True,
             "name": "extract_files",
             "type": "bool",
-            "value": False,
+            "value": True,
         }
     ]
 
