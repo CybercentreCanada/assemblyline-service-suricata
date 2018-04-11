@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import os
+import platform
 
 # install using PPA built packages
 # On internet connected machine:
@@ -14,7 +15,15 @@ import os
 def install(alsi):
 
     # .deb packages to manually install
-    deb_pkgs = ["libhtp2_1%3a0.5.26-2ubuntu3_amd64.deb", "suricata_4.0.4-2ubuntu3_amd64.deb"]
+    deb_pkgs_ubt14 = ["libhiredis0.10_0.11.0-3_amd64.deb",  "libhtp2_1%3a0.5.26-2ubuntu4_amd64.deb", "suricata_4.0.4-2ubuntu4_amd64.deb"]
+    deb_pkgs_ubt16 = ["libhtp2_1%3a0.5.26-2ubuntu3_amd64.deb", "suricata_4.0.4-2ubuntu3_amd64.deb"]
+
+    (dist, version, name) = platform.linux_distribution()
+
+    if version == "14.04":
+        deb_pkgs = deb_pkgs_ubt14
+    elif version == "16.04":
+        deb_pkgs = deb_pkgs_ubt16
 
     # pull them down first
     for deb_pkg in deb_pkgs:
