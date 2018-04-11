@@ -34,7 +34,7 @@ def install(alsi):
 
     # now install them
     for deb_pkg in local_paths:
-        alsi.runcmd("dpkg -i %s" % deb_pkg)
+        alsi.runcmd("sudo dpkg -i %s" % deb_pkg)
 
     # disable the service and make sure it's not running
     alsi.runcmd("sudo systemctl disable suricata")
