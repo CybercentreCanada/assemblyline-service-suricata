@@ -18,11 +18,11 @@ def install(alsi):
     deb_pkgs_ubt14 = ["libhiredis0.10_0.11.0-3_amd64.deb",  "libhtp2_1%3a0.5.26-2ubuntu4_amd64.deb", "suricata_4.0.4-2ubuntu4_amd64.deb"]
     deb_pkgs_ubt16 = ["libhtp2_1%3a0.5.26-2ubuntu3_amd64.deb", "suricata_4.0.4-2ubuntu3_amd64.deb"]
 
-    (dist, version, name) = platform.linux_distribution()
+    (dist, ubt_version, name) = platform.linux_distribution()
 
-    if version == "14.04":
+    if ubt_version == "14.04":
         deb_pkgs = deb_pkgs_ubt14
-    elif version == "16.04":
+    elif ubt_version == "16.04":
         deb_pkgs = deb_pkgs_ubt16
 
     # pull them down first
@@ -37,8 +37,12 @@ def install(alsi):
         alsi.runcmd("sudo dpkg -i %s" % deb_pkg)
 
     # disable the service and make sure it's not running
-    alsi.runcmd("sudo systemctl disable suricata")
-    alsi.runcmd("sudo systemctl stop suricata")
+    if ubt_version == "14.04":
+        alsi.runcmd("sudo service suricata stop")
+        alsi.runcmd("sudo update-rc.d suricata disable")
+    elif ubt_version == "16.04":
+        alsi.runcmd("sudo systemctl disable suricata")
+        alsi.runcmd("sudo systemctl stop suricata")
 
     # clean up
     for deb_pkg in local_paths:
