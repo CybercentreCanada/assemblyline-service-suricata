@@ -45,7 +45,9 @@ def install(alsi):
             "libluajit-5.1-2",
             "libluajit-5.1-common",
             "libmnl0",
-            "libnetfilter-queue1"])
+            "libnetfilter-queue1",
+            "libjansson4",
+            "libnet1"])
         for deb_pkg in local_paths:
             alsi.runcmd("sudo dpkg -i --force-confnew %s" % deb_pkg)
 
