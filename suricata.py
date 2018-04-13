@@ -14,6 +14,7 @@ from assemblyline.al.service.base import ServiceBase, UpdaterFrequency, UpdaterT
 suricatasc = None
 dateparser = None
 
+SURICATA_BIN = "/usr/bin/suricata"
 
 class Suricata(ServiceBase):
     SERVICE_ACCEPTS = 'network/tcpdump'
@@ -27,7 +28,7 @@ class Suricata(ServiceBase):
     SERVICE_RAM_MB = 1024
 
     SERVICE_DEFAULT_CONFIG = {
-        "SURICATA_BIN": "/usr/bin/suricata",
+        # "SURICATA_BIN": "/usr/bin/suricata",
         "SURE_SCORE": "MALWARE TROJAN CURRENT_EVENTS CnC Checkin",
         "VHIGH_SCORE": "EXPLOIT SCAN Adware PUP",
         "RULES_URLS": ["https://rules.emergingthreats.net/open/suricata/emerging.rules.tar.gz"],
@@ -145,7 +146,7 @@ class Suricata(ServiceBase):
         self.suricata_socket = os.path.join(self.run_dir, str(uuid.uuid4()) + '.socket')
 
         command = [
-            self.cfg.get('SURICATA_BIN'),
+            SURICATA_BIN,
             "-c", os.path.join(self.run_dir, 'suricata.yaml'),
             "--unix-socket=%s" % self.suricata_socket,
             "--pidfile", "%s/suricata.pid" % self.run_dir,
@@ -169,7 +170,7 @@ class Suricata(ServiceBase):
             {
                 'type': 'shell',
                 'args': ["pkill", "--SIGKILL", "--nslist", "pid", "--ns", str(self.suricata_process.pid), "-f",
-                         self.cfg.get('SURICATA_BIN')]
+                         SURICATA_BIN]
             }
         )
 

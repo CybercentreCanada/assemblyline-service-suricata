@@ -14,6 +14,11 @@ import platform
 
 def install(alsi):
 
+    # Install oinkmaster
+    alsi.sudo_apt_install([
+        'oinkmaster'
+        ])
+
     # .deb packages to manually install
     deb_pkgs_ubt14 = ["libhiredis0.10_0.11.0-3_amd64.deb",  "libhtp2_1%3a0.5.26-2ubuntu4_amd64.deb", "suricata_4.0.4-2ubuntu4_amd64.deb"]
     deb_pkgs_ubt16 = ["libhtp2_1%3a0.5.26-2ubuntu3_amd64.deb", "suricata_4.0.4-2ubuntu3_amd64.deb"]
@@ -25,10 +30,6 @@ def install(alsi):
     elif ubt_version == "16.04":
         deb_pkgs = deb_pkgs_ubt16
 
-    # Check if suricata is already installed
-    # c = alsi.runcmd("dpkg -l | grep suricata | grep ii | cat")
-    
-
     # pull them down first
     for deb_pkg in deb_pkgs:
         alsi.fetch_package(os.path.join("suricata/", deb_pkg),
@@ -37,8 +38,19 @@ def install(alsi):
     local_paths = [os.path.join("/tmp/", deb_pkg) for deb_pkg in deb_pkgs]
 
     # now install them
-    for deb_pkg in local_paths:
-        alsi.runcmd("sudo dpkg -i %s" % deb_pkg)
+    if ubt_version == "14.04":
+        # Need to manually install some dependancies
+        alsi.sudo_apt_install([
+            "libluajit-5.1-2",
+            "libluajit-5.1-common",
+            "libmnl0",
+            "libnetfilter-queue1"])
+        for deb_pkg in local_paths:
+            alsi.runcmd("sudo dpkg -i --force-confnew %s" % deb_pkg)
+
+    # newer apt can install .deb files directly and handle dep resolution
+    elif ubt_version == "16.04":
+        alsi.sudo_apt_install(local_paths)
 
     # disable the service and make sure it's not running
     if ubt_version == "14.04":
