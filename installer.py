@@ -20,8 +20,9 @@ def install(alsi):
         ])
 
     # .deb packages to manually install
-    deb_pkgs_ubt14 = ["libhiredis0.10_0.11.0-3_amd64.deb",  "libhtp2_1%3a0.5.26-2ubuntu4_amd64.deb", "suricata_4.0.4-2ubuntu4_amd64.deb"]
-    deb_pkgs_ubt16 = ["libhtp2_1%3a0.5.26-2ubuntu3_amd64.deb", "suricata_4.0.4-2ubuntu3_amd64.deb"]
+    deb_pkgs_ubt14 = ["libhiredis0.10_0.11.0-3_amd64.deb", "libhtp2_1%253a0.5.26-2ubuntu4_amd64.deb",
+                      "suricata_4.0.4-2ubuntu4_amd64.deb"]
+    deb_pkgs_ubt16 = ["libhtp2_1%253a0.5.26-2ubuntu3_amd64.deb", "suricata_4.0.4-2ubuntu3_amd64.deb"]
 
     (dist, ubt_version, name) = platform.linux_distribution()
 
