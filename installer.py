@@ -3,69 +3,35 @@
 import os
 import platform
 
-# install using PPA built packages
-# On internet connected machine:
-# sudo add-apt-repository ppa:oisf/suricata-stable
-# sudo apt-get update
-# Then to download packages to upload separately to s3
-# sudo apt-get install -d -o=dir::cache=/tmp suricata
-# As far as I can tell, you should only need the libhtp2 and suricata .deb files
+# DON'T USE PPA
+# Currently pinning version to 3.2.5 (last release in 3.*) due to mishandling of onesided comms https://redmine.openinfosecfoundation.org/issues/2491
+# If that bug gets fixed, then newest PPA release should work again
 
 
 def install(alsi):
-
-    # Install oinkmaster
     alsi.sudo_apt_install([
-        'oinkmaster'
-        ])
-
-    # .deb packages to manually install
-    deb_pkgs_ubt14 = ["libhiredis0.10_0.11.0-3_amd64.deb", "libhtp2_1_0.5.26-2ubuntu4_amd64.deb",
-                      "suricata_4.0.4-2ubuntu4_amd64.deb"]
-    deb_pkgs_ubt16 = ["libhtp2_1_0.5.26-2ubuntu3_amd64.deb", "suricata_4.0.4-2ubuntu3_amd64.deb"]
-
-    (dist, ubt_version, name) = platform.linux_distribution()
-
-    if ubt_version == "14.04":
-        deb_pkgs = deb_pkgs_ubt14
-    elif ubt_version == "16.04":
-        deb_pkgs = deb_pkgs_ubt16
-
-    # pull them down first
-    for deb_pkg in deb_pkgs:
-        alsi.fetch_package(os.path.join("suricata/", deb_pkg),
-                           os.path.join("/tmp/", deb_pkg))
-
-    local_paths = [os.path.join("/tmp/", deb_pkg) for deb_pkg in deb_pkgs]
-
-    # now install them
-    if ubt_version == "14.04":
-        # Need to manually install some dependancies
-        alsi.sudo_apt_install([
-            "libluajit-5.1-2",
-            "libluajit-5.1-common",
-            "libmnl0",
-            "libnetfilter-queue1",
-            "libjansson4",
-            "libnet1"])
-        for deb_pkg in local_paths:
-            alsi.runcmd("sudo dpkg -i --force-confnew %s" % deb_pkg)
-
-    # newer apt can install .deb files directly and handle dep resolution
-    elif ubt_version == "16.04":
-        alsi.sudo_apt_install(local_paths)
-
-    # disable the service and make sure it's not running
-    if ubt_version == "14.04":
-        alsi.runcmd("sudo service suricata stop")
-        alsi.runcmd("sudo update-rc.d -f suricata remove")
-    elif ubt_version == "16.04":
-        alsi.runcmd("sudo systemctl disable suricata")
-        alsi.runcmd("sudo systemctl stop suricata")
-
-    # clean up
-    for deb_pkg in local_paths:
-        alsi.runcmd('sudo rm -rf %s' % deb_pkg)
+        'oinkmaster',
+        'libpcre3',
+        'libpcre3-dbg',
+        'libpcre3-dev',
+        'build-essential',
+        'autoconf',
+        'automake',
+        'libtool',
+        'libpcap-dev',
+        'libnet1-dev',
+        'libyaml-0-2',
+        'libyaml-dev',
+        'zlib1g',
+        'zlib1g-dev',
+        'libcap-ng-dev',
+        'libcap-ng0',
+        'make',
+        'libmagic-dev',
+        'libjansson-dev',
+        'libjansson4',
+        'pkg-config'
+    ])
 
     alsi.pip_install_all(['simplejson', 'python-dateutil'])
 
@@ -74,6 +40,32 @@ def install(alsi):
         '/etc/suricata/rules',
         '/var/log/suricata'
     ]
+
+    do_compile = False
+
+    # Run some checks to see if we should compile and install
+    if not os.path.exists("/usr/local/bin/suricata"):
+        do_compile = True
+    else:
+        # Check version
+        rc, ver_stdout, ver_stderr = alsi.runcmd("/usr/local/bin/suricata -V")
+        if "3.2.5" not in ver_stdout:
+            do_compile = True
+
+    if do_compile:
+        src = 'suricata-3.2.5.tar.gz'
+        remote_path = os.path.join('suricata/' + src)
+        local_path = os.path.join('/tmp/', src)
+
+        # Grab Suricata from the package repo
+        alsi.fetch_package(remote_path, local_path)
+
+        # Configure and build Suricata
+        alsi.runcmd('sudo tar -C /tmp/ -xzf ' + local_path)
+        src_path = local_path[:-7]
+        alsi.runcmd('cd %s && sudo ./configure --prefix=/usr/local/ --sysconfdir=/etc/ --localstatedir=/var/ '
+                   '&& sudo make -C %s && sudo make -C %s install && sudo ldconfig' % (src_path, src_path, src_path))
+        alsi.runcmd('sudo rm -rf %s %s' % (src_path, local_path))
 
     # Create directories
     for directory in directories:
