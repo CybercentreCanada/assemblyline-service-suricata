@@ -14,7 +14,7 @@ from assemblyline.al.service.base import ServiceBase, UpdaterFrequency, UpdaterT
 suricatasc = None
 dateparser = None
 
-SURICATA_BIN = "/usr/bin/suricata"
+SURICATA_BIN = "/usr/local/bin/suricata"
 
 class Suricata(ServiceBase):
     SERVICE_ACCEPTS = 'network/tcpdump'
