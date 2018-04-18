@@ -1,0 +1,19 @@
+This PCAP was carved out of smallFlows.pcap from http://tcpreplay.appneta.com/wiki/captures.html#smallflows-pcap
+
+It should dump out 3 JPGs, given sha256 sums:
+
+al@ip-172-31-15-143:~/pkg/al_services/alsvc_suricata/testing$ file /var/log/suricata/files/*
+/var/log/suricata/files/file.1:      JPEG image data, JFIF standard 1.01, resolution (DPI), density 96x96, segment length 16, baseline, precision 8, 178x100, frames 3
+/var/log/suricata/files/file.1.meta: ASCII text
+/var/log/suricata/files/file.2:      JPEG image data, JFIF standard 1.01, resolution (DPI), density 96x96, segment length 16, baseline, precision 8, 1x1, frames 3
+/var/log/suricata/files/file.2.meta: ASCII text
+/var/log/suricata/files/file.3:      JPEG image data, JFIF standard 1.02, aspect ratio, density 100x100, segment length 16, baseline, precision 8, 180x200, frames 3
+/var/log/suricata/files/file.3.meta: ASCII text
+al@ip-172-31-15-143:~/pkg/al_services/alsvc_suricata/testing$ sha256sum /var/log/suricata/files/*
+ae225b894077c69d3444a40201feb942e3d9cb5d83935941d10b0394914cbfa1  /var/log/suricata/files/file.1
+043f3c9b451b1a69eac7f91ffefd978852a2951eb6500ad2f2555084b48b00fc  /var/log/suricata/files/file.1.meta
+25cf0f0ce42f8acd9ea6facc223f54105c7fd0cce63fb7bb5d83e6600100acbd  /var/log/suricata/files/file.2
+d6fa4f0ff5836e626211e609c6b2cd7f815081cf838b8517d33ee86d9575b2e9  /var/log/suricata/files/file.2.meta
+993e02d0438b8a1a3d700ca09cf9c6851492351bf1d2f9531cf778879320969d  /var/log/suricata/files/file.3
+67fc29b4c4aebe47be20eec43b25a128e342b02480939acc5bfef35cb2e8ba18  /var/log/suricata/files/file.3.meta
+

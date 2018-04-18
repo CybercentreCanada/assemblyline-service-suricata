@@ -1,6 +1,11 @@
 #!/usr/bin/env python
 
 import os
+import platform
+
+# DON'T USE PPA
+# Currently pinning version to 3.2.5 (last release in 3.*) due to mishandling of onesided comms https://redmine.openinfosecfoundation.org/issues/2491
+# If that bug gets fixed, then newest PPA release should work again
 
 
 def install(alsi):
@@ -36,8 +41,19 @@ def install(alsi):
         '/var/log/suricata'
     ]
 
+    do_compile = False
+
+    # Run some checks to see if we should compile and install
     if not os.path.exists("/usr/local/bin/suricata"):
-        src = 'suricata-3.1.2.tar.gz'
+        do_compile = True
+    else:
+        # Check version
+        rc, ver_stdout, ver_stderr = alsi.runcmd("/usr/local/bin/suricata -V")
+        if "3.2.5" not in ver_stdout:
+            do_compile = True
+
+    if do_compile:
+        src = 'suricata-3.2.5.tar.gz'
         remote_path = os.path.join('suricata/' + src)
         local_path = os.path.join('/tmp/', src)
 
@@ -84,6 +100,7 @@ def install(alsi):
         stripe_path = os.path.join(alsi.alroot, 'pkg', 'al_services', 'alsvc_suricata', "stripe")
         alsi.runcmd('/usr/bin/gcc -o %s %s' % (os.path.join(stripe_path, 'stripe'), os.path.join(stripe_path, 'stripe.c')))
         alsi.runcmd('sudo cp %s %s' % (os.path.join(stripe_path, 'stripe'), '/usr/local/bin/stripe'))
+
 
 if __name__ == '__main__':
     from assemblyline.al.install import SiteInstaller

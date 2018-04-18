@@ -14,6 +14,7 @@ from assemblyline.al.service.base import ServiceBase, UpdaterFrequency, UpdaterT
 suricatasc = None
 dateparser = None
 
+SURICATA_BIN = "/usr/local/bin/suricata"
 
 class Suricata(ServiceBase):
     SERVICE_ACCEPTS = 'network/tcpdump'
@@ -22,17 +23,27 @@ class Suricata(ServiceBase):
     SERVICE_STAGE = "CORE"
     SERVICE_REVISION = ServiceBase.parse_revision('$Id$')
     SERVICE_TIMEOUT = 60
-    SERVICE_VERSION = '1'
+    SERVICE_VERSION = '2'
     SERVICE_CPU_CORES = 1
     SERVICE_RAM_MB = 1024
 
     SERVICE_DEFAULT_CONFIG = {
-        "SURICATA_BIN": "/usr/local/bin/suricata",
+        # "SURICATA_BIN": "/usr/bin/suricata",
         "SURE_SCORE": "MALWARE TROJAN CURRENT_EVENTS CnC Checkin",
         "VHIGH_SCORE": "EXPLOIT SCAN Adware PUP",
         "RULES_URLS": ["https://rules.emergingthreats.net/open/suricata/emerging.rules.tar.gz"],
         "HOME_NET": "any"
     }
+
+    # make file extraction an option
+    SERVICE_DEFAULT_SUBMISSION_PARAMS = [
+        {
+            "default": True,
+            "name": "extract_files",
+            "type": "bool",
+            "value": True,
+        }
+    ]
 
     def __init__(self, cfg=None):
         super(Suricata, self).__init__(cfg)
@@ -135,7 +146,7 @@ class Suricata(ServiceBase):
         self.suricata_socket = os.path.join(self.run_dir, str(uuid.uuid4()) + '.socket')
 
         command = [
-            self.cfg.get('SURICATA_BIN'),
+            SURICATA_BIN,
             "-c", os.path.join(self.run_dir, 'suricata.yaml'),
             "--unix-socket=%s" % self.suricata_socket,
             "--pidfile", "%s/suricata.pid" % self.run_dir,
@@ -159,7 +170,7 @@ class Suricata(ServiceBase):
             {
                 'type': 'shell',
                 'args': ["pkill", "--SIGKILL", "--nslist", "pid", "--ns", str(self.suricata_process.pid), "-f",
-                         self.cfg.get('SURICATA_BIN')]
+                         SURICATA_BIN]
             }
         )
 
@@ -209,6 +220,8 @@ class Suricata(ServiceBase):
         ips = []
         urls = []
 
+        file_extracted_reported = False
+
         # Parse the json results of the service
         for line in open(os.path.join(self.working_directory, 'eve.json')):
             record = json.loads(line)
@@ -254,6 +267,24 @@ class Suricata(ServiceBase):
                     signatures[signature_id] = signature
 
                 alerts[signature_id].append("%s %s:%s -> %s:%s" % (timestamp, src_ip, src_port, dest_ip, dest_port))
+
+            # Check to see if any files were extracted
+            if request.get_param("extract_files") and record["event_type"] == "fileinfo":
+                filename = record["fileinfo"]["filename"]
+                extracted_file_path = os.path.join(self.working_directory, 'files', 'file.%d' % record["fileinfo"]["file_id"])
+
+                self.log.info("extracted file %s" % filename)
+
+                request.add_extracted(extracted_file_path, "Extracted by suricata", display_name=filename)
+
+                # Report a null score to indicate that files were extracted. If no sigs hit, it's not clear
+                # where the extracted files came from
+                if not file_extracted_reported:
+                    file_extracted_reported = True
+                    section = ResultSection(SCORE.NULL, "Files extracted by suricata")
+                    result.add_section(section)
+
+
 
         # Create the result sections if there are any hits
         if len(alerts) > 0:
