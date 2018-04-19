@@ -270,7 +270,7 @@ class Suricata(ServiceBase):
 
             # Check to see if any files were extracted
             if request.get_param("extract_files") and record["event_type"] == "fileinfo":
-                filename = record["fileinfo"]["filename"]
+                filename = os.path.basename(record["fileinfo"]["filename"])
                 extracted_file_path = os.path.join(self.working_directory, 'files', 'file.%d' % record["fileinfo"]["file_id"])
 
                 self.log.info("extracted file %s" % filename)
