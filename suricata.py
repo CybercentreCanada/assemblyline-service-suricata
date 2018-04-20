@@ -219,6 +219,7 @@ class Suricata(ServiceBase):
         domains = []
         ips = []
         urls = []
+        net_email = []
 
         file_extracted_reported = False
 
@@ -268,6 +269,14 @@ class Suricata(ServiceBase):
 
                 alerts[signature_id].append("%s %s:%s -> %s:%s" % (timestamp, src_ip, src_port, dest_ip, dest_port))
 
+            if record["event_type"] == "smtp":
+                # extract email metadata
+                if not "smtp" in record:
+                    continue
+                if not isinstance(record["smtp"], dict):
+                    continue
+
+
             # Check to see if any files were extracted
             if request.get_param("extract_files") and record["event_type"] == "fileinfo":
                 filename = os.path.basename(record["fileinfo"]["filename"])
@@ -284,6 +293,15 @@ class Suricata(ServiceBase):
                     section = ResultSection(SCORE.NULL, "Files extracted by suricata")
                     result.add_section(section)
 
+        # Add tags for the domains, urls, and IPs we've discovered
+        for domain in domains:
+            result.add_tag(TAG_TYPE.NET_DOMAIN_NAME, domain, TAG_WEIGHT.VHIGH, usage=TAG_USAGE.CORRELATION)
+        for url in urls:
+            result.add_tag(TAG_TYPE.NET_FULL_URI, url, TAG_WEIGHT.VHIGH, usage=TAG_USAGE.CORRELATION)
+        for ip in ips:
+            # Make sure it's not a local IP
+            if not (ip.startswith("192.168.") or ip.startswith("10.") or (ip.startswith("172.") and int(ip.split(".")[1]) >= 16 and int(ip.split(".")[1]) <= 31)):
+                result.add_tag(TAG_TYPE.NET_IP, ip, TAG_WEIGHT.VHIGH, usage=TAG_USAGE.CORRELATION)
 
 
         # Create the result sections if there are any hits
@@ -313,13 +331,7 @@ class Suricata(ServiceBase):
                 result.add_tag(TAG_TYPE.SURICATA_SIGNATURE_MESSAGE, signature, tag_weight,
                                usage=TAG_USAGE.IDENTIFICATION)
 
-            # Add tags for the domains, urls, and IPs we've discovered
-            for domain in domains:
-                result.add_tag(TAG_TYPE.NET_DOMAIN_NAME, domain, TAG_WEIGHT.VHIGH, usage=TAG_USAGE.CORRELATION)
-            for url in urls:
-                result.add_tag(TAG_TYPE.NET_FULL_URI, url, TAG_WEIGHT.VHIGH, usage=TAG_USAGE.CORRELATION)
-            for ip in ips:
-                result.add_tag(TAG_TYPE.NET_IP, ip, TAG_WEIGHT.VHIGH, usage=TAG_USAGE.CORRELATION)
+
 
             # Add the original Suricata output as a supplementary file in the result
             request.add_supplementary(os.path.join(self.working_directory, 'eve.json'), 'json', 'SuricataEventLog.json')
