@@ -219,6 +219,10 @@ class Suricata(ServiceBase):
         domains = []
         ips = []
         urls = []
+        net_email = []
+
+        # tls stuff
+        tls_dict = {}
 
         file_extracted_reported = False
 
@@ -268,6 +272,38 @@ class Suricata(ServiceBase):
 
                 alerts[signature_id].append("%s %s:%s -> %s:%s" % (timestamp, src_ip, src_port, dest_ip, dest_port))
 
+            if record["event_type"] == "smtp":
+                # extract email metadata
+                if not "smtp" in record:
+                    continue
+                if not isinstance(record["smtp"], dict):
+                    continue
+
+                mail_from = record["smtp"]["mail_from"]
+                if mail_from is not None:
+                    mail_from = mail_from.replace("<","").replace(">","")
+                    if mail_from not in net_email:
+                        net_email.append(mail_from)
+
+                for email_addr in record["smtp"]["rcpt_to"]:
+                    email_addr = email_addr.replace("<","").replace(">","")
+                    if email_addr not in net_email:
+                        net_email.append(email_addr)
+
+            if record["event_type"] == "tls":
+                if not "tls" in record:
+                    continue
+                if not isinstance(record["tls"], dict):
+                    continue
+
+                for tls_type, tls_value in record["tls"].iteritems():
+                    if tls_type not in tls_dict:
+                        tls_dict[tls_type] = []
+                    if tls_value not in tls_dict[tls_type]:
+                        tls_dict[tls_type].append(tls_value)
+
+
+
             # Check to see if any files were extracted
             if request.get_param("extract_files") and record["event_type"] == "fileinfo":
                 filename = os.path.basename(record["fileinfo"]["filename"])
@@ -284,6 +320,38 @@ class Suricata(ServiceBase):
                     section = ResultSection(SCORE.NULL, "Files extracted by suricata")
                     result.add_section(section)
 
+        # Add tags for the domains, urls, and IPs we've discovered
+        for domain in domains:
+            result.add_tag(TAG_TYPE.NET_DOMAIN_NAME, domain, TAG_WEIGHT.VHIGH, usage=TAG_USAGE.CORRELATION)
+        for url in urls:
+            result.add_tag(TAG_TYPE.NET_FULL_URI, url, TAG_WEIGHT.VHIGH, usage=TAG_USAGE.CORRELATION)
+        for ip in ips:
+            # Make sure it's not a local IP
+            if not (ip.startswith("127.") or ip.startswith("192.168.") or ip.startswith("10.") or (ip.startswith("172.") and int(ip.split(".")[1]) >= 16 and int(ip.split(".")[1]) <= 31)):
+                result.add_tag(TAG_TYPE.NET_IP, ip, TAG_WEIGHT.VHIGH, usage=TAG_USAGE.CORRELATION)
+
+        for eml in net_email:
+            result.add_tag(TAG_TYPE.NET_EMAIL, eml, TAG_WEIGHT.VHIGH, usage=TAG_USAGE.CORRELATION)
+
+        # Map between suricata key names and AL tag types
+        tls_mappings = {
+            "subject": TAG_TYPE.CERT_SUBJECT,
+            "issuerdn": TAG_TYPE.CERT_ISSUER,
+            "version": TAG_TYPE.CERT_VERSION,
+            "notbefore": TAG_TYPE.CERT_VALID_FROM,
+            "notafter": TAG_TYPE.CERT_VALID_TO,
+            "fingerprint": None
+        }
+        for tls_type, tls_values in tls_dict.iteritems():
+            if tls_type in tls_mappings:
+                tag_type = tls_mappings[tls_type]
+
+                if tag_type is not None:
+                    for tls_value in tls_values:
+                        result.add_tag(tag_type, tls_value, TAG_WEIGHT.VHIGH, usage=TAG_USAGE.CORRELATION)
+            else:
+                # stick a message in the logs about a new TLS type found in suricata logs
+                self.log.info("Found new TLS type %s with values %s" % (tls_type, tls_values))
 
 
         # Create the result sections if there are any hits
@@ -313,13 +381,7 @@ class Suricata(ServiceBase):
                 result.add_tag(TAG_TYPE.SURICATA_SIGNATURE_MESSAGE, signature, tag_weight,
                                usage=TAG_USAGE.IDENTIFICATION)
 
-            # Add tags for the domains, urls, and IPs we've discovered
-            for domain in domains:
-                result.add_tag(TAG_TYPE.NET_DOMAIN_NAME, domain, TAG_WEIGHT.VHIGH, usage=TAG_USAGE.CORRELATION)
-            for url in urls:
-                result.add_tag(TAG_TYPE.NET_FULL_URI, url, TAG_WEIGHT.VHIGH, usage=TAG_USAGE.CORRELATION)
-            for ip in ips:
-                result.add_tag(TAG_TYPE.NET_IP, ip, TAG_WEIGHT.VHIGH, usage=TAG_USAGE.CORRELATION)
+
 
             # Add the original Suricata output as a supplementary file in the result
             request.add_supplementary(os.path.join(self.working_directory, 'eve.json'), 'json', 'SuricataEventLog.json')
