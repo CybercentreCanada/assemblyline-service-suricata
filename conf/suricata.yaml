@@ -73,7 +73,8 @@ outputs:
         - smtp:
             extended: yes
         - netflow
-        - tls
+        - tls:
+            extended: yes
 
   # a line based alerts log similar to Snort's fast.log
   - fast:
