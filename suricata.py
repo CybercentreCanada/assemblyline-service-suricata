@@ -276,6 +276,17 @@ class Suricata(ServiceBase):
                 if not isinstance(record["smtp"], dict):
                     continue
 
+                mail_from = record["smtp"]["mail_from"]
+                if mail_from is not None:
+                    mail_from = mail_from.replace("<","").replace(">","")
+                    if mail_from not in net_email:
+                        net_email.append(mail_from)
+
+                for email_addr in record["smtp"]["rcpt_to"]:
+                    email_addr = email_addr.replace("<","").replace(">","")
+                    if email_addr not in net_email:
+                        net_email.append(email_addr)
+
 
             # Check to see if any files were extracted
             if request.get_param("extract_files") and record["event_type"] == "fileinfo":
@@ -302,6 +313,9 @@ class Suricata(ServiceBase):
             # Make sure it's not a local IP
             if not (ip.startswith("192.168.") or ip.startswith("10.") or (ip.startswith("172.") and int(ip.split(".")[1]) >= 16 and int(ip.split(".")[1]) <= 31)):
                 result.add_tag(TAG_TYPE.NET_IP, ip, TAG_WEIGHT.VHIGH, usage=TAG_USAGE.CORRELATION)
+
+        for eml in net_email:
+            result.add_tag(TAG_TYPE.NET_EMAIL, eml, TAG_WEIGHT.VHIGH, usage=TAG_USAGE.CORRELATION)
 
 
         # Create the result sections if there are any hits
