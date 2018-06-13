@@ -68,7 +68,13 @@ outputs:
         - alert
         - http
         - dns
-        - files
+        - files:
+            force-hash: sha256
+        - smtp:
+            extended: yes
+        - netflow
+        - tls:
+            extended: yes
 
   # a line based alerts log similar to Snort's fast.log
   - fast:
