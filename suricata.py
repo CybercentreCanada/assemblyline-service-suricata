@@ -17,7 +17,7 @@ dateparser = None
 SURICATA_BIN = "/usr/local/bin/suricata"
 
 class Suricata(ServiceBase):
-    SERVICE_ACCEPTS = 'network/tcpdump'
+    SERVICE_ACCEPTS = 'network/.*'
     SERVICE_CATEGORY = 'Networking'
     SERVICE_ENABLED = True
     SERVICE_STAGE = "CORE"
@@ -196,6 +196,12 @@ class Suricata(ServiceBase):
 
         # Strip frame headers from the PCAP, since Suricata sometimes has trouble parsing strange PCAPs
         stripped_filepath = self.strip_frame_headers(file_path)
+
+        # Check to make sure the size of the stripped file isn't 0 - this happens on pcapng files
+        # TODO: there's probably a better way to do this - don't event strip it if it's pcapng
+        if os.stat(stripped_filepath).st_size == 0:
+            stripped_filepath = file_path
+
 
         # Pass the pcap file to Suricata via the socket
         ret = self.suricata_sc.send_command("pcap-file", {
