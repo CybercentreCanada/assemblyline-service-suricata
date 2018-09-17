@@ -80,9 +80,13 @@ class Suricata(ServiceBase):
         self.replace_suricata_config()
         self.start_suricata_if_necessary()
 
-    # The rules are updated once per day, so each day we have a new tool version
     def get_tool_version(self):
-        return os.path.getmtime(self.oinkmaster_update_file)
+        """
+        Use the modification timestamp of the rules file as well as the suricata version
+        :return:
+        """
+        version_string = subprocess.check_output(["suricata","-V"]).strip().replace("This is Suricata version ","").replace(" ", "_")
+        return "%s-%d" % (version_string, os.path.getmtime(self.oinkmaster_update_file))
 
     # When we're shutting down, kill the Suricata child process as well
     def stop(self):
