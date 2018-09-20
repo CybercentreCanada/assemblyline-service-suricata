@@ -197,7 +197,7 @@ class Suricata(ServiceBase):
         result = Result()
 
         # Report the version of suricata as the service context
-        request.set_service_context("Suricata version: " % self._get_suricata_version())
+        request.set_service_context("Suricata version: %s " % self._get_suricata_version())
 
         # restart Suricata if we need to
         self.start_suricata_if_necessary()
