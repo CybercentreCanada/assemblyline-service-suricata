@@ -80,13 +80,17 @@ class Suricata(ServiceBase):
         self.replace_suricata_config()
         self.start_suricata_if_necessary()
 
+    def _get_suricata_version(self):
+        version_string = subprocess.check_output(["suricata", "-V"]).strip().replace("This is Suricata version ",
+                                                                                     "").replace(" ", "_")
+        return version_string
+
     def get_tool_version(self):
         """
         Use the modification timestamp of the rules file as well as the suricata version
         :return:
         """
-        version_string = subprocess.check_output(["suricata","-V"]).strip().replace("This is Suricata version ","").replace(" ", "_")
-        return "%s-%d" % (version_string, os.path.getmtime(self.oinkmaster_update_file))
+        return "%s-%d" % (self._get_suricata_version(), os.path.getmtime(self.oinkmaster_update_file))
 
     # When we're shutting down, kill the Suricata child process as well
     def stop(self):
@@ -191,6 +195,9 @@ class Suricata(ServiceBase):
     def execute(self, request):
         file_path = request.download()
         result = Result()
+
+        # Report the version of suricata as the service context
+        request.set_service_context("Suricata version: " % self._get_suricata_version())
 
         # restart Suricata if we need to
         self.start_suricata_if_necessary()
