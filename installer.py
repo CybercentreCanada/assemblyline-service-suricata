@@ -85,15 +85,15 @@ def install(alsi):
     rules_urls = alsi.config['services']['master_list']['Suricata']['config']['RULES_URLS']
 
     # Update our local rules using Oinkmaster
-    rules_command = ["sudo", "/usr/sbin/oinkmaster", "-Q", "-o", "/etc/suricata/rules"]
+    rules_command = ["sudo", "suricata-update"]
     for rules_url in rules_urls:
-        rules_command.extend(["-u",
+        rules_command.extend(["--url",
                               rules_url.replace('/', '\/').replace('[', '\[').replace(']', '\]').replace(':', '\:')])
     alsi.runcmd(" ".join(rules_command))
 
-    alsi.runcmd("sudo touch /etc/suricata/oinkmaster")
+    alsi.runcmd("sudo touch /etc/suricata/suricata-rules-update")
     alsi.runcmd('sudo chown -R %s /etc/suricata/rules' % alsi.config['system']['user'])
-    alsi.runcmd('sudo chown %s /etc/suricata/oinkmaster' % alsi.config['system']['user'])
+    alsi.runcmd('sudo chown %s /etc/suricata/suricata-rules-update' % alsi.config['system']['user'])
 
     # Build stripe, a tool to strip frame headers from PCAP files
     if not os.path.exists("/usr/local/bin/stripe"):

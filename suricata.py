@@ -53,14 +53,14 @@ class Suricata(ServiceBase):
         self.last_rule_update = None
         self.rules_urls = cfg.get("RULES_URLS", self.SERVICE_DEFAULT_CONFIG["RULES_URLS"])
         self.home_net = cfg.get("HOME_NET", self.SERVICE_DEFAULT_CONFIG["HOME_NET"])
-        self.oinkmaster_update_file = '/etc/suricata/oinkmaster'
+        self.oinkmaster_update_file = '/etc/suricata/suricata-rules-update'
         self.run_dir = None
 
     # Update our local rules using Oinkmaster
     def update_suricata(self, **_):
-        command = ["/usr/sbin/oinkmaster",  "-Q", "-o", "/etc/suricata/rules"]
+        command = ["suricata-update"]
         for rules_url in self.rules_urls:
-            command.extend(["-u", rules_url])
+            command.extend(["--url", rules_url])
         subprocess.call(command)
         subprocess.call(["touch", self.oinkmaster_update_file])
 
