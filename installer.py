@@ -4,13 +4,11 @@ import os
 import platform
 
 # DON'T USE PPA
-# Currently pinning version to 3.2.5 (last release in 3.*) due to mishandling of onesided comms https://redmine.openinfosecfoundation.org/issues/2491
-# If that bug gets fixed, then newest PPA release should work again
+# just simpler to compile rather than keeping track of which package goes with which LTS release
 
 
 def install(alsi):
     alsi.sudo_apt_install([
-        'oinkmaster',
         'libpcre3',
         'libpcre3-dbg',
         'libpcre3-dev',
@@ -30,10 +28,12 @@ def install(alsi):
         'libmagic-dev',
         'libjansson-dev',
         'libjansson4',
-        'pkg-config'
+        'pkg-config',
+        'cargo',
+        'liblua5.1-dev'
     ])
 
-    alsi.pip_install_all(['simplejson', 'python-dateutil'])
+    alsi.pip_install_all(['simplejson', 'python-dateutil', 'suricata-update'])
 
     directories = [
         '/etc/suricata',
@@ -49,11 +49,11 @@ def install(alsi):
     else:
         # Check version
         rc, ver_stdout, ver_stderr = alsi.runcmd("/usr/local/bin/suricata -V")
-        if "3.2.5" not in ver_stdout:
+        if "4.1.0" not in ver_stdout:
             do_compile = True
 
     if do_compile:
-        src = 'suricata-3.2.5.tar.gz'
+        src = 'suricata-4.1.0.tar.gz'
         remote_path = os.path.join('suricata/' + src)
         local_path = os.path.join('/tmp/', src)
 
@@ -63,8 +63,8 @@ def install(alsi):
         # Configure and build Suricata
         alsi.runcmd('sudo tar -C /tmp/ -xzf ' + local_path)
         src_path = local_path[:-7]
-        alsi.runcmd('cd %s && sudo ./configure --prefix=/usr/local/ --sysconfdir=/etc/ --localstatedir=/var/ '
-                   '&& sudo make -C %s && sudo make -C %s install && sudo ldconfig' % (src_path, src_path, src_path))
+        alsi.runcmd('cd %s && sudo ./configure --prefix=/usr/local/ --sysconfdir=/etc/ --localstatedir=/var/ --enable-python --enable-rust --enable-lua'
+                   '&& sudo make -C %s && sudo make -C %s install-full && sudo ldconfig' % (src_path, src_path, src_path))
         alsi.runcmd('sudo rm -rf %s %s' % (src_path, local_path))
 
     # Create directories
