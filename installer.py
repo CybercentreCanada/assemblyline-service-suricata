@@ -30,7 +30,8 @@ def install(alsi):
         'libjansson4',
         'pkg-config',
         'cargo',
-        'liblua5.1-dev'
+        'liblua5.1-dev',
+        'libnss3-dev'       # needed to support file-store v2 module
     ])
 
     alsi.pip_install_all(['simplejson', 'python-dateutil', 'suricata-update'])
@@ -49,11 +50,11 @@ def install(alsi):
     else:
         # Check version
         rc, ver_stdout, ver_stderr = alsi.runcmd("/usr/local/bin/suricata -V")
-        if "4.1.0" not in ver_stdout:
+        if "4.1.2" not in ver_stdout:
             do_compile = True
 
     if do_compile:
-        src = 'suricata-4.1.0.tar.gz'
+        src = 'suricata-4.1.2.tar.gz'
         remote_path = os.path.join('suricata/' + src)
         local_path = os.path.join('/tmp/', src)
 
@@ -92,7 +93,7 @@ def install(alsi):
     alsi.runcmd(" ".join(rules_command))
 
     alsi.runcmd("sudo touch /etc/suricata/suricata-rules-update")
-    alsi.runcmd('sudo chown -R %s /etc/suricata/rules' % alsi.config['system']['user'])
+    alsi.runcmd('sudo chown -R %s /var/lib/suricata/' % alsi.config['system']['user'])
     alsi.runcmd('sudo chown %s /etc/suricata/suricata-rules-update' % alsi.config['system']['user'])
 
     # Build stripe, a tool to strip frame headers from PCAP files
