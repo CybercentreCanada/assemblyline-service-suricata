@@ -38,7 +38,7 @@ def install(alsi):
 
     directories = [
         '/etc/suricata',
-        '/etc/suricata/rules',
+        '/var/lib/suricata',
         '/var/log/suricata'
     ]
 
@@ -85,8 +85,9 @@ def install(alsi):
 
     rules_urls = alsi.config['services']['master_list']['Suricata']['config']['RULES_URLS']
 
-    # Update our local rules using Oinkmaster
-    rules_command = ["sudo", "suricata-update"]
+    # Update our local rules using suricata-update script
+    # make sure to run as the system user
+    rules_command = ["sudo", "-u", alsi.config['system']['user'] ,"suricata-update", "--no-test"]
     for rules_url in rules_urls:
         rules_command.extend(["--url",
                               rules_url.replace('/', '\/').replace('[', '\[').replace(']', '\]').replace(':', '\:')])
