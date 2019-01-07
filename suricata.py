@@ -128,10 +128,11 @@ class Suricata(ServiceBase):
         self.log.info("Reloading suricata rules...")
         ret = self.suricata_sc.send_command("reload-rules")
 
-        if not ret and ret["return"] != "OK":
+        if not ret or ret.get("return", "") != "OK":
             self.log.exception("Failed to reload Suricata rules")
-        else:
-            self.last_rule_reload = time.time()
+            return
+
+        self.last_rule_reload = time.time()
 
         # Get rule stats
         ret = self.suricata_sc.send_command("ruleset-stats")
