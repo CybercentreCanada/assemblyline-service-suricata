@@ -58,7 +58,10 @@ class Suricata(ServiceBase):
 
     # Update our local rules using Oinkmaster
     def update_suricata(self, **_):
-        command = ["suricata-update"]
+        # We're using the '--no-test' mode because otherwise a rule failing causes *no* updates to happen
+        # A few rules typically fail out of the box because the default value for HOME_NET is 'any'
+        # and some rules check for !$HOME_NET - which suricata errors on
+        command = ["suricata-update", "--no-test"]
         for rules_url in self.rules_urls:
             command.extend(["--url", rules_url])
         subprocess.call(command)
