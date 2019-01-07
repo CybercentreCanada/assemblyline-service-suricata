@@ -372,7 +372,8 @@ class Suricata(ServiceBase):
             "version": TAG_TYPE.CERT_VERSION,
             "notbefore": TAG_TYPE.CERT_VALID_FROM,
             "notafter": TAG_TYPE.CERT_VALID_TO,
-            "fingerprint": TAG_TYPE.CERT_THUMBPRINT
+            "fingerprint": TAG_TYPE.CERT_THUMBPRINT,
+            "sni": TAG_TYPE.NET_DOMAIN_NAME
         }
         for tls_type, tls_values in tls_dict.iteritems():
             if tls_type in tls_mappings:
