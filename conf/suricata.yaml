@@ -1352,6 +1352,8 @@ flow-timeouts:
 #                               # is used in a rule.
 #
 stream:
+  midstream: true
+  async-oneside: true
   memcap: 1gb
   checksum-validation: no      # reject wrong csums
   inline: no                  # auto will use inline mode in IPS mode, yes or no set it statically
