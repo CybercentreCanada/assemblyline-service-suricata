@@ -32,7 +32,7 @@ class Suricata(ServiceBase):
         "SURE_SCORE": "MALWARE TROJAN CURRENT_EVENTS CnC Checkin",
         "VHIGH_SCORE": "EXPLOIT SCAN Adware PUP",
         "RULES_URLS": ["https://rules.emergingthreats.net/open/suricata/emerging.rules.tar.gz"],
-        "HOME_NET": "[172.16.0.0/12, 192.168.0.0/16, 10.0.0.0/8]"
+        "HOME_NET": "any"
     }
 
     # make file extraction an option
@@ -50,7 +50,7 @@ class Suricata(ServiceBase):
         self.suricata_socket = None
         self.suricata_sc = None
         self.suricata_process = None
-        self.last_rule_update = None
+        self.last_rule_reload = None
         self.rules_urls = cfg.get("RULES_URLS", self.SERVICE_DEFAULT_CONFIG["RULES_URLS"])
         self.home_net = cfg.get("HOME_NET", self.SERVICE_DEFAULT_CONFIG["HOME_NET"])
         self.oinkmaster_update_file = '/etc/suricata/suricata-rules-update'
@@ -120,15 +120,23 @@ class Suricata(ServiceBase):
                 dp.write(sp.read().replace("__HOME_NET__", home_net))
 
     def reload_rules_if_necessary(self):
-        if self.last_rule_update < self.get_tool_version():
+        if self.last_rule_reload < self.get_tool_version():
             self.reload_rules()
 
     # Send the reload_rules command to the socket
     def reload_rules(self):
+        self.log.info("Reloading suricata rules...")
         ret = self.suricata_sc.send_command("reload-rules")
 
         if not ret and ret["return"] != "OK":
             self.log.exception("Failed to reload Suricata rules")
+        else:
+            self.last_rule_reload = time.time()
+
+        # Get rule stats
+        ret = self.suricata_sc.send_command("ruleset-stats")
+        if ret:
+            self.log.info("Current ruleset stats: %s" % str(ret.get("message")))
 
     def start_suricata_if_necessary(self):
         if not self.suricata_running():
@@ -186,7 +194,7 @@ class Suricata(ServiceBase):
 
         if not self.suricata_running_retry():
             raise Exception('Suricata could not be started.')
-        self.last_rule_update = time.time()
+        self.last_rule_reload = time.time()
 
     # noinspection PyUnresolvedReferences
     def import_service_deps(self):
