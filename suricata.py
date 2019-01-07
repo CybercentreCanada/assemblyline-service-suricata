@@ -120,7 +120,7 @@ class Suricata(ServiceBase):
                 dp.write(sp.read().replace("__HOME_NET__", home_net))
 
     def reload_rules_if_necessary(self):
-        if self.last_rule_reload < self.get_tool_version():
+        if self.last_rule_reload < os.path.getmtime(self.oinkmaster_update_file):
             self.reload_rules()
 
     # Send the reload_rules command to the socket
