@@ -50,17 +50,20 @@ class Suricata(ServiceBase):
         self.suricata_socket = None
         self.suricata_sc = None
         self.suricata_process = None
-        self.last_rule_update = None
+        self.last_rule_reload = None
         self.rules_urls = cfg.get("RULES_URLS", self.SERVICE_DEFAULT_CONFIG["RULES_URLS"])
         self.home_net = cfg.get("HOME_NET", self.SERVICE_DEFAULT_CONFIG["HOME_NET"])
-        self.oinkmaster_update_file = '/etc/suricata/oinkmaster'
+        self.oinkmaster_update_file = '/etc/suricata/suricata-rules-update'
         self.run_dir = None
 
     # Update our local rules using Oinkmaster
     def update_suricata(self, **_):
-        command = ["/usr/sbin/oinkmaster",  "-Q", "-o", "/etc/suricata/rules"]
+        # We're using the '--no-test' mode because otherwise a rule failing causes *no* updates to happen
+        # A few rules typically fail out of the box because the default value for HOME_NET is 'any'
+        # and some rules check for !$HOME_NET - which suricata errors on
+        command = ["suricata-update", "--no-test"]
         for rules_url in self.rules_urls:
-            command.extend(["-u", rules_url])
+            command.extend(["--url", rules_url])
         subprocess.call(command)
         subprocess.call(["touch", self.oinkmaster_update_file])
 
@@ -113,21 +116,31 @@ class Suricata(ServiceBase):
     def replace_suricata_config(self):
         source_path = os.path.join(self.source_directory, 'conf', 'suricata.yaml')
         dest_path = os.path.join(self.run_dir, 'suricata.yaml')
-        home_net = re.sub(r"([/\[\]])", r"\\\1", self.home_net)
+        # home_net = re.sub(r"([/\[\]])", r"\\\1", self.home_net)
+        home_net = self.home_net
         with open(source_path) as sp:
             with open(dest_path, "w") as dp:
                 dp.write(sp.read().replace("__HOME_NET__", home_net))
 
     def reload_rules_if_necessary(self):
-        if self.last_rule_update < self.get_tool_version():
+        if self.last_rule_reload < os.path.getmtime(self.oinkmaster_update_file):
             self.reload_rules()
 
     # Send the reload_rules command to the socket
     def reload_rules(self):
+        self.log.info("Reloading suricata rules...")
         ret = self.suricata_sc.send_command("reload-rules")
 
-        if not ret and ret["return"] != "OK":
+        if not ret or ret.get("return", "") != "OK":
             self.log.exception("Failed to reload Suricata rules")
+            return
+
+        self.last_rule_reload = time.time()
+
+        # Get rule stats
+        ret = self.suricata_sc.send_command("ruleset-stats")
+        if ret:
+            self.log.info("Current ruleset stats: %s" % str(ret.get("message")))
 
     def start_suricata_if_necessary(self):
         if not self.suricata_running():
@@ -158,6 +171,7 @@ class Suricata(ServiceBase):
             "-c", os.path.join(self.run_dir, 'suricata.yaml'),
             "--unix-socket=%s" % self.suricata_socket,
             "--pidfile", "%s/suricata.pid" % self.run_dir,
+            "--set", "logging.outputs.1.file.filename=%s" % os.path.join(self.run_dir, 'suricata.log'),
         ]
 
         self.log.info('Launching Suricata: %s' % (' '.join(command)))
@@ -184,7 +198,7 @@ class Suricata(ServiceBase):
 
         if not self.suricata_running_retry():
             raise Exception('Suricata could not be started.')
-        self.last_rule_update = time.time()
+        self.last_rule_reload = time.time()
 
     # noinspection PyUnresolvedReferences
     def import_service_deps(self):
@@ -248,14 +262,14 @@ class Suricata(ServiceBase):
             record = json.loads(line)
 
             timestamp = dateparser.parse(record['timestamp']).isoformat(' ')
-            src_ip = record['src_ip']
-            src_port = record['src_port']
-            dest_ip = record['dest_ip']
-            dest_port = record['dest_port']
+            src_ip = record.get('src_ip')
+            src_port = record.get('src_port')
+            dest_ip = record.get('dest_ip')
+            dest_port = record.get('dest_port')
 
-            if src_ip not in ips:
+            if src_ip is not None and src_ip not in ips:
                 ips.append(src_ip)
-            if dest_ip not in ips:
+            if dest_ip is not None and dest_ip not in ips:
                 ips.append(dest_ip)
 
             if record['event_type'] == 'http':
@@ -319,12 +333,13 @@ class Suricata(ServiceBase):
                     if tls_value not in tls_dict[tls_type]:
                         tls_dict[tls_type].append(tls_value)
 
-
-
             # Check to see if any files were extracted
             if request.get_param("extract_files") and record["event_type"] == "fileinfo":
                 filename = os.path.basename(record["fileinfo"]["filename"])
-                extracted_file_path = os.path.join(self.working_directory, 'files', 'file.%d' % record["fileinfo"]["file_id"])
+                extracted_file_path = os.path.join(self.working_directory,
+                                                   'filestore',
+                                                   '%s' % record["fileinfo"]["sha256"][:2].lower(),
+                                                   record["fileinfo"]["sha256"])
 
                 self.log.info("extracted file %s" % filename)
 
@@ -357,7 +372,8 @@ class Suricata(ServiceBase):
             "version": TAG_TYPE.CERT_VERSION,
             "notbefore": TAG_TYPE.CERT_VALID_FROM,
             "notafter": TAG_TYPE.CERT_VALID_TO,
-            "fingerprint": None
+            "fingerprint": TAG_TYPE.CERT_THUMBPRINT,
+            "sni": TAG_TYPE.NET_DOMAIN_NAME
         }
         for tls_type, tls_values in tls_dict.iteritems():
             if tls_type in tls_mappings:
@@ -365,7 +381,21 @@ class Suricata(ServiceBase):
 
                 if tag_type is not None:
                     for tls_value in tls_values:
+                        if tls_type == "fingerprint":
+                            # make sure the cert fingerprint/thumbprint matches other values,
+                            # like from PEFile
+                            tls_value = tls_value.replace(":", "").lower()
                         result.add_tag(tag_type, tls_value, TAG_WEIGHT.VHIGH, usage=TAG_USAGE.CORRELATION)
+
+            elif tls_type == "ja3":
+                for ja3_entry in tls_values:
+                    ja3_hash = ja3_entry.get("hash")
+                    ja3_string = ja3_entry.get("string")
+                    if ja3_hash:
+                        result.add_tag(TAG_TYPE.TLS_JA3_HASH, ja3_hash)
+                    if ja3_string:
+                        result.add_tag(TAG_TYPE.TLS_JA3_STRING, ja3_string)
+
             else:
                 # stick a message in the logs about a new TLS type found in suricata logs
                 self.log.info("Found new TLS type %s with values %s" % (tls_type, tls_values))
