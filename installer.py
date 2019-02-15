@@ -65,7 +65,7 @@ def install(alsi):
         alsi.runcmd('sudo tar -C /tmp/ -xzf ' + local_path)
         src_path = local_path[:-7]
         alsi.runcmd('cd %s && sudo ./configure --prefix=/usr/local/ --sysconfdir=/etc/ --localstatedir=/var/ --enable-python --enable-rust --enable-lua'
-                   '&& sudo make -C %s && sudo make -C %s install-full && sudo ldconfig' % (src_path, src_path, src_path))
+                   '&& sudo make -C %s && sudo make -C %s install && sudo ldconfig && sudo make -C %s install-full' % (src_path, src_path, src_path, src_path))
         alsi.runcmd('sudo rm -rf %s %s' % (src_path, local_path))
 
     # Create directories
