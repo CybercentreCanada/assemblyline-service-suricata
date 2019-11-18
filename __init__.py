@@ -1,1 +1,0 @@
-from suricata import Suricata
