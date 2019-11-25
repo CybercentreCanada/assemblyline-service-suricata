@@ -1,40 +1,3 @@
-#!/usr/bin/env python
-
-import os
-import platform
-
-# DON'T USE PPA
-# just simpler to compile rather than keeping track of which package goes with which LTS release
-
-
-def install(alsi):
-    alsi.sudo_apt_install([
-        'libpcre3',
-        'libpcre3-dbg',
-        'libpcre3-dev',
-        'build-essential',
-        'autoconf',
-        'automake',
-        'libtool',
-        'libpcap-dev',
-        'libnet1-dev',
-        'libyaml-0-2',
-        'libyaml-dev',
-        'zlib1g',
-        'zlib1g-dev',
-        'libcap-ng-dev',
-        'libcap-ng0',
-        'make',
-        'libmagic-dev',
-        'libjansson-dev',
-        'libjansson4',
-        'pkg-config',
-        'cargo',
-        'liblua5.1-dev',
-        'libnss3-dev'       # needed to support file-store v2 module
-    ])
-
-    alsi.pip_install_all(['simplejson', 'python-dateutil', 'suricata-update'])
 
     directories = [
         '/etc/suricata',
@@ -102,9 +65,3 @@ def install(alsi):
         stripe_path = os.path.join(alsi.alroot, 'pkg', 'al_services', 'alsvc_suricata', "stripe")
         alsi.runcmd('/usr/bin/gcc -o %s %s' % (os.path.join(stripe_path, 'stripe'), os.path.join(stripe_path, 'stripe.c')))
         alsi.runcmd('sudo cp %s %s' % (os.path.join(stripe_path, 'stripe'), '/usr/local/bin/stripe'))
-
-
-if __name__ == '__main__':
-    from assemblyline.al.install import SiteInstaller
-
-    install(SiteInstaller())

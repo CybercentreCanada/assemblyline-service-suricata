@@ -14,6 +14,7 @@ from assemblyline_v4_service.common.base import ServiceBase
 from assemblyline_v4_service.common.result import Result, ResultSection
 
 SURICATA_BIN = "/usr/local/bin/suricata"
+FILE_UPDATE_DIRECTORY = os.environ.get('FILE_UPDATE_DIRECTORY')
 
 
 class Suricata(ServiceBase):
@@ -23,21 +24,10 @@ class Suricata(ServiceBase):
         self.suricata_sc = None
         self.suricata_process = None
         self.last_rule_reload = None
-        self.rules_urls = self.config.get("RULES_URLS", self.SERVICE_DEFAULT_CONFIG["RULES_URLS"])
         self.home_net = self.config.get("HOME_NET", self.SERVICE_DEFAULT_CONFIG["HOME_NET"])
         self.oinkmaster_update_file = '/etc/suricata/suricata-rules-update'
         self.run_dir = None
-
-    # Update our local rules using Oinkmaster
-    def update_suricata(self, **_):
-        # We're using the '--no-test' mode because otherwise a rule failing causes *no* updates to happen
-        # A few rules typically fail out of the box because the default value for HOME_NET is 'any'
-        # and some rules check for !$HOME_NET - which suricata errors on
-        command = ["suricata-update", "--no-test"]
-        for rules_url in self.rules_urls:
-            command.extend(["--url", rules_url])
-        subprocess.call(command)
-        subprocess.call(["touch", self.oinkmaster_update_file])
+        self.suricata_rules_file = None
 
     # Use an external tool to strip frame headers
     def strip_frame_headers(self, filepath):
@@ -49,10 +39,19 @@ class Suricata(ServiceBase):
         return new_filepath
 
     def start(self):
-        self.run_dir = tempfile.mkdtemp(dir="/tmp")
-        self._register_update_callback(self.update_suricata)
-        self.replace_suricata_config()
-        self.start_suricata_if_necessary()
+        if not os.path.exists(FILE_UPDATE_DIRECTORY):
+            raise Exception("Suricata rules directory not found")
+
+        suricata_rules_dirs = [x for x in sorted(os.listdir(FILE_UPDATE_DIRECTORY), reverse=True) if
+                           not x.startswith('.tmp')]
+
+        for suricata_rules_dir in suricata_rules_dirs:
+            self.suricata_rules_file = os.path.join(suricata_rules_dir, 'suricata.rules')
+            self.run_dir = tempfile.mkdtemp(dir="/tmp")
+            self.replace_suricata_config()
+            self.start_suricata_if_necessary()
+            if self.suricata_running():
+                break
 
     def _get_suricata_version(self):
         version_string = subprocess.check_output(["suricata", "-V"]).strip().replace("This is Suricata version ",
@@ -85,7 +84,7 @@ class Suricata(ServiceBase):
 
     # Reapply our service configuration to the Suricata yaml configuration
     def replace_suricata_config(self):
-        source_path = os.path.join(self.source_directory, 'conf', 'suricata.yaml')
+        source_path = os.path.join(self.working_directory, 'conf', 'suricata.yaml')
         dest_path = os.path.join(self.run_dir, 'suricata.yaml')
         # home_net = re.sub(r"([/\[\]])", r"\\\1", self.home_net)
         home_net = self.home_net
@@ -143,6 +142,7 @@ class Suricata(ServiceBase):
             f"--unix-socket={self.suricata_socket}",
             "--pidfile", f"{self.run_dir}/suricata.pid",
             "--set", f"logging.outputs.1.file.filename={os.path.join(self.run_dir, 'suricata.log')}",
+            "-S", self.suricata_rules_file,
         ]
 
         self.log.info(f"Launching Suricata: {' '.join(command)}")
@@ -151,29 +151,14 @@ class Suricata(ServiceBase):
 
         self.suricata_sc = suricatasc.SuricataSC(self.suricata_socket)
 
-        # Schedule a job to delete the socket when it isn't needed any longer
-        self._register_cleanup_op(
-            {
-                'type': 'shell',
-                'args': ["rm", "-rf", self.run_dir]
-            }
-        )
-        # Note, in case the process is terminated without calling stop()
-        self._register_cleanup_op(
-            {
-                'type': 'shell',
-                'args': ["pkill", "--SIGKILL", "--nslist", "pid", "--ns", str(self.suricata_process.pid), "-f",
-                         SURICATA_BIN]
-            }
-        )
-
         if not self.suricata_running_retry():
             raise Exception('Suricata could not be started.')
         self.last_rule_reload = time.time()
 
     def execute(self, request):
         file_path = request.file_path
-        result = Result()
+        r = Result()
+        result = ResultSection("SAMPLE", parent=r)  # TODO
 
         # Report the version of suricata as the service context
         request.set_service_context(f"Suricata version: {self._get_suricata_version()}")
@@ -314,7 +299,7 @@ class Suricata(ServiceBase):
                 if not file_extracted_reported:
                     file_extracted_reported = True
                     section = ResultSection("Files extracted by suricata")
-                    result.add_section(section)
+                    result.add_subsection(section) # TODO: was add_section before
 
         # Add tags for the domains, urls, and IPs we've discovered
         for domain in domains:
@@ -327,8 +312,7 @@ class Suricata(ServiceBase):
                     or ip.startswith("192.168.")
                     or ip.startswith("10.")
                     or (ip.startswith("172.")
-                        and int(ip.split(".")[1]) >= 16
-                        and int(ip.split(".")[1]) <= 31)):
+                        and 16 <= int(ip.split(".")[1]) <= 31)):
                 result.add_tag('network.ip', ip)
 
         for eml in net_email:
@@ -372,30 +356,32 @@ class Suricata(ServiceBase):
         # Create the result sections if there are any hits
         if len(alerts) > 0:
             for signature_id, signature in signatures.items():
-                score = SCORE.NULL
+                # score = SCORE.NULL  # TODO
 
                 if any(x in signature for x in self.config.get("sure_score")):
-                    score = SCORE.SURE
+                    # score = SCORE.SURE  # TODO
+                    pass
 
                 if any(x in signature for x in self.config.get("vhigh_score")):
-                    score = SCORE.VHIGH
+                    # score = SCORE.VHIGH  # TODO
+                    pass
 
-                section = ResultSection(score, f'{signature_id}: {signature}')
+                section = ResultSection(f'{signature_id}: {signature}')  # section = ResultSection(score, f'{signature_id}: {signature}')
                 for flow in alerts[signature_id][:10]:
                     section.add_line(flow)
                 if len(alerts[signature_id]) > 10:
                     section.add_line(f'And {len(alerts[signature_id]) - 10} more flows')
-                result.add_section(section)
+                result.add_subsection(section)  # TODO: was add_section before
 
                 # Add a tag for the signature id and the message
                 result.add_tag('network.signature.signature_id', str(signature_id))
                 result.add_tag('network.signature.message', signature)
 
             # Add the original Suricata output as a supplementary file in the result
-            request.add_supplementary(os.path.join(self.working_directory, 'eve.json'), 'json', 'SuricataEventLog.json')
+            request.add_supplementary(os.path.join(self.working_directory, 'eve.json'), 'SuricataEventLog.json', 'json')
 
         # Add the stats.log to the result, which can be used to determine service success
         if os.path.exists(os.path.join(self.working_directory, 'stats.log')):
-            request.add_supplementary(os.path.join(self.working_directory, 'stats.log'), 'log', 'stats.log')
+            request.add_supplementary(os.path.join(self.working_directory, 'stats.log'), 'stats.log', 'log')
 
-        request.result = result
+        request.result = r
