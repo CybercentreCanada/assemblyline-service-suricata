@@ -24,7 +24,7 @@ class Suricata(ServiceBase):
         self.suricata_sc = None
         self.suricata_process = None
         self.last_rule_reload = None
-        self.home_net = self.config.get("HOME_NET", self.SERVICE_DEFAULT_CONFIG["HOME_NET"])
+        self.home_net = self.config.get("home_net", "any")
         self.oinkmaster_update_file = '/etc/suricata/suricata-rules-update'
         self.run_dir = None
         self.suricata_rules_file = None
@@ -303,9 +303,9 @@ class Suricata(ServiceBase):
 
         # Add tags for the domains, urls, and IPs we've discovered
         for domain in domains:
-            result.add_tag('network.domain', domain)
+            result.add_tag('network.static.domain', domain)
         for url in urls:
-            result.add_tag('network.uri', url)
+            result.add_tag('network.static.uri', url)
         for ip in ips:
             # Make sure it's not a local IP
             if not (ip.startswith("127.")
@@ -313,7 +313,7 @@ class Suricata(ServiceBase):
                     or ip.startswith("10.")
                     or (ip.startswith("172.")
                         and 16 <= int(ip.split(".")[1]) <= 31)):
-                result.add_tag('network.ip', ip)
+                result.add_tag('network.static.ip', ip)
 
         for eml in net_email:
             result.add_tag('network.email.address', eml)
@@ -326,7 +326,7 @@ class Suricata(ServiceBase):
             "notbefore": 'cert.valid.start',
             "notafter": 'cert.valid.end',
             "fingerprint": 'cert.thumbprint',
-            "sni": 'network.domain'
+            "sni": 'network.static.domain'
         }
         for tls_type, tls_values in tls_dict.items():
             if tls_type in tls_mappings:
