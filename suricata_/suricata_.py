@@ -43,7 +43,7 @@ class Suricata(ServiceBase):
             raise Exception("Suricata rules directory not found")
 
         suricata_rules_dirs = [x for x in sorted(os.listdir(FILE_UPDATE_DIRECTORY), reverse=True) if
-                           not x.startswith('.tmp')]
+                               not x.startswith('.tmp')]
 
         for suricata_rules_dir in suricata_rules_dirs:
             self.suricata_rules_file = os.path.join(suricata_rules_dir, 'suricata.rules')
@@ -53,10 +53,13 @@ class Suricata(ServiceBase):
             if self.suricata_running():
                 break
 
+        if not self.suricata_running():
+            raise Exception("Unable to start Suricata because no Suricata rules were found")
+
     def _get_suricata_version(self):
-        version_string = subprocess.check_output(["suricata", "-V"]).strip().replace("This is Suricata version ",
-                                                                                     "").replace(" ", "_")
-        return version_string
+        version_string = subprocess.check_output(["suricata", "-V"]).strip().replace(b"This is Suricata version ",
+                                                                                     b"").replace(b" ", b"_")
+        return version_string.decode()
 
     def get_tool_version(self):
         """
@@ -84,7 +87,7 @@ class Suricata(ServiceBase):
 
     # Reapply our service configuration to the Suricata yaml configuration
     def replace_suricata_config(self):
-        source_path = os.path.join(self.working_directory, 'conf', 'suricata.yaml')
+        source_path = os.path.join(os.getcwd(), 'suricata_', 'conf', 'suricata.yaml')
         dest_path = os.path.join(self.run_dir, 'suricata.yaml')
         # home_net = re.sub(r"([/\[\]])", r"\\\1", self.home_net)
         home_net = self.home_net
@@ -157,8 +160,7 @@ class Suricata(ServiceBase):
 
     def execute(self, request):
         file_path = request.file_path
-        r = Result()
-        result = ResultSection("SAMPLE", parent=r)  # TODO
+        result = Result()
 
         # Report the version of suricata as the service context
         request.set_service_context(f"Suricata version: {self._get_suricata_version()}")
@@ -254,29 +256,29 @@ class Suricata(ServiceBase):
 
             if record["event_type"] == "smtp":
                 # extract email metadata
-                if not "smtp" in record:
+                if "smtp" not in record:
                     continue
                 if not isinstance(record["smtp"], dict):
                     continue
 
                 mail_from = record["smtp"]["mail_from"]
                 if mail_from is not None:
-                    mail_from = mail_from.replace("<","").replace(">","")
+                    mail_from = mail_from.replace("<", "").replace(">", "")
                     if mail_from not in net_email:
                         net_email.append(mail_from)
 
                 for email_addr in record["smtp"]["rcpt_to"]:
-                    email_addr = email_addr.replace("<","").replace(">","")
+                    email_addr = email_addr.replace("<", "").replace(">", "")
                     if email_addr not in net_email:
                         net_email.append(email_addr)
 
             if record["event_type"] == "tls":
-                if not "tls" in record:
+                if "tls" not in record:
                     continue
                 if not isinstance(record["tls"], dict):
                     continue
 
-                for tls_type, tls_value in record["tls"].iteritems():
+                for tls_type, tls_value in record["tls"].items():
                     if tls_type not in tls_dict:
                         tls_dict[tls_type] = []
                     if tls_value not in tls_dict[tls_type]:
@@ -298,14 +300,14 @@ class Suricata(ServiceBase):
                 # where the extracted files came from
                 if not file_extracted_reported:
                     file_extracted_reported = True
-                    section = ResultSection("Files extracted by suricata")
-                    result.add_subsection(section) # TODO: was add_section before
+                    result.add_section(ResultSection("Files extracted by suricata"))
 
         # Add tags for the domains, urls, and IPs we've discovered
+        root_section = ResultSection("Discovered IOCs")
         for domain in domains:
-            result.add_tag('network.static.domain', domain)
+            root_section.add_tag('network.static.domain', domain)
         for url in urls:
-            result.add_tag('network.static.uri', url)
+            root_section.add_tag('network.static.uri', url)
         for ip in ips:
             # Make sure it's not a local IP
             if not (ip.startswith("127.")
@@ -313,10 +315,10 @@ class Suricata(ServiceBase):
                     or ip.startswith("10.")
                     or (ip.startswith("172.")
                         and 16 <= int(ip.split(".")[1]) <= 31)):
-                result.add_tag('network.static.ip', ip)
+                root_section.add_tag('network.static.ip', ip)
 
         for eml in net_email:
-            result.add_tag('network.email.address', eml)
+            root_section.add_tag('network.email.address', eml)
 
         # Map between suricata key names and AL tag types
         tls_mappings = {
@@ -338,16 +340,16 @@ class Suricata(ServiceBase):
                             # make sure the cert fingerprint/thumbprint matches other values,
                             # like from PEFile
                             tls_value = tls_value.replace(":", "").lower()
-                        result.add_tag(tag_type, tls_value)
+                        root_section.add_tag(tag_type, tls_value)
 
             elif tls_type == "ja3":
                 for ja3_entry in tls_values:
                     ja3_hash = ja3_entry.get("hash")
                     ja3_string = ja3_entry.get("string")
                     if ja3_hash:
-                        result.add_tag('network.tls.ja3_hash', ja3_hash)
+                        root_section.add_tag('network.tls.ja3_hash', ja3_hash)
                     if ja3_string:
-                        result.add_tag('network.tls.ja3_string', ja3_string)
+                        root_section.add_tag('network.tls.ja3_string', ja3_string)
 
             else:
                 # stick a message in the logs about a new TLS type found in suricata logs
@@ -356,26 +358,23 @@ class Suricata(ServiceBase):
         # Create the result sections if there are any hits
         if len(alerts) > 0:
             for signature_id, signature in signatures.items():
-                # score = SCORE.NULL  # TODO
-
+                section = ResultSection(f'{signature_id}: {signature}')
                 if any(x in signature for x in self.config.get("sure_score")):
-                    # score = SCORE.SURE  # TODO
-                    pass
+                    section.set_heuristic(1)
 
                 if any(x in signature for x in self.config.get("vhigh_score")):
-                    # score = SCORE.VHIGH  # TODO
-                    pass
+                    section.set_heuristic(2)
 
-                section = ResultSection(f'{signature_id}: {signature}')  # section = ResultSection(score, f'{signature_id}: {signature}')
                 for flow in alerts[signature_id][:10]:
                     section.add_line(flow)
                 if len(alerts[signature_id]) > 10:
                     section.add_line(f'And {len(alerts[signature_id]) - 10} more flows')
-                result.add_subsection(section)  # TODO: was add_section before
 
                 # Add a tag for the signature id and the message
-                result.add_tag('network.signature.signature_id', str(signature_id))
-                result.add_tag('network.signature.message', signature)
+                section.add_tag('network.signature.signature_id', str(signature_id))
+                section.add_tag('network.signature.message', signature)
+
+                result.add_section(section)
 
             # Add the original Suricata output as a supplementary file in the result
             request.add_supplementary(os.path.join(self.working_directory, 'eve.json'), 'SuricataEventLog.json', 'json')
@@ -384,4 +383,4 @@ class Suricata(ServiceBase):
         if os.path.exists(os.path.join(self.working_directory, 'stats.log')):
             request.add_supplementary(os.path.join(self.working_directory, 'stats.log'), 'stats.log', 'log')
 
-        request.result = r
+        request.result = result

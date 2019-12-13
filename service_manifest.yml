@@ -27,6 +27,19 @@ submission_params:
     type: bool
     value: true
 
+heuristics:
+  - heur_id: 1
+    name: Suricata signature hit with sure score
+    score: 1000
+    filetype: network/.*
+    description: Suricata signature hit with sure score
+
+  - heur_id: 2
+    name: Suricata signature hit with very high score
+    score: 500
+    filetype: network/.*
+    description: Suricata signature hit with very high score
+
 docker_config:
   image: cccs/assemblyline-service-suricata:latest
   cpu_cores: 1
