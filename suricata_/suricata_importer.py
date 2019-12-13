@@ -34,7 +34,7 @@ class SuricataImporter:
             sig = Signature(dict(
                 classification=self.classification.UNRESTRICTED,
                 data=signature.raw,
-                name=name,
+                name=signature.msg or name,
                 order=order,
                 revision=int(float(signature.rev)),
                 signature_id=name,
