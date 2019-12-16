@@ -1,7 +1,7 @@
 FROM cccs/assemblyline-v4-service-base:latest
 
 ENV SERVICE_PATH suricata_.suricata_.Suricata
-ENV SURICATA_VERSION 5.0.1
+ENV SURICATA_VERSION 4.1.2
 
 RUN apt-get update && apt-get install -y \
   libpcre3 \
