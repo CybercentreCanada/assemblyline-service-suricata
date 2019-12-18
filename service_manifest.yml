@@ -46,6 +46,7 @@ docker_config:
   ram_mb: 1024
 
 update_config:
+  generates_signatures: true
   method: run
   run_options:
     allow_internet_access: true
