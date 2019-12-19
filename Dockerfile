@@ -4,6 +4,7 @@ ENV SERVICE_PATH suricata_.suricata_.Suricata
 ENV SURICATA_VERSION 4.1.2
 
 RUN apt-get update && apt-get install -y \
+  git \
   libpcre3 \
   libpcre3-dbg \
   libpcre3-dev \
@@ -30,6 +31,7 @@ RUN apt-get update && apt-get install -y \
   liblz4-dev
 
 RUN pip install \
+  gitpython \
   simplejson \
   python-dateutil \
   suricata-update \

@@ -50,7 +50,7 @@ update_config:
   method: run
   run_options:
     allow_internet_access: true
-    command: ["python", "-m", "suricata.suricata_updater"]
+    command: ["python", "-m", "suricata_.suricata_updater"]
     image: cccs/assemblyline-service-suricata:latest
   sources:
     - name: emerging_threats
