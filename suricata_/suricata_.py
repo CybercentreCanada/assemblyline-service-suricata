@@ -8,6 +8,7 @@ import uuid
 
 import dateutil.parser as dateparser
 import suricatasc
+from assemblyline.common.str_utils import safe_str
 from retrying import retry
 
 from assemblyline_v4_service.common.base import ServiceBase
@@ -59,7 +60,7 @@ class Suricata(ServiceBase):
     def _get_suricata_version(self):
         version_string = subprocess.check_output(["suricata", "-V"]).strip().replace(b"This is Suricata version ",
                                                                                      b"").replace(b" ", b"_")
-        return version_string.decode()
+        return safe_str(version_string)
 
     def get_tool_version(self):
         """
