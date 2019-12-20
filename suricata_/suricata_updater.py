@@ -17,7 +17,6 @@ from git import Repo
 
 from assemblyline.common import log as al_log
 from assemblyline.common.digests import get_sha256_for_file
-from assemblyline.common.isotime import now_as_iso
 from suricata_.suricata_importer import SuricataImporter
 
 al_log.init_logging('service_updater')
@@ -93,9 +92,6 @@ def url_download(source: Dict[str, Any], previous_update: Optional[float] = None
                         filepath = os.path.join(extract_dir, path_in_dir, filename)
                         rules_files.add(filepath)
 
-                # Delete the tar.gz file
-                os.remove(file_path)
-
             return list(rules_files) or [file_path], [get_sha256_for_file(file_path)]
     except requests.Timeout:
         # TODO: should we retry?
@@ -161,7 +157,7 @@ def suricata_update() -> None:
         exit()
 
     sources = {source['name']: source for source in update_config['sources']}
-    update_start_time = now_as_iso()
+    all_files = []
     files_sha256 = []
 
     suricata_sources = []
@@ -171,6 +167,8 @@ def suricata_update() -> None:
 
         if uri.endswith('.git'):
             files, sha256 = git_clone_repo(source)
+            for file in files:
+                all_files.append((source_name, file))
             if sha256:
                 files_sha256.extend(sha256)
             clone_dir = os.path.join(UPDATE_DIR, source_name)
@@ -179,6 +177,8 @@ def suricata_update() -> None:
             suricata_sources.append(('url', source['uri']))
             previous_update = update_config.get('previous_update', None)
             files, sha256 = url_download(source, previous_update=previous_update)
+            for file in files:
+                all_files.append((source_name, file))
             if sha256:
                 files_sha256.extend(sha256)
 
@@ -206,9 +206,6 @@ def suricata_update() -> None:
     # subprocess.call(command)
     # # subprocess.call(["touch", self.oinkmaster_update_file])
 
-    files = glob.glob(UPDATE_OUTPUT_PATH+'/*')
-    LOGGER.info(files)
-
     LOGGER.info("Suricata rule(s) file(s) successfully downloaded")
 
     server = update_config['ui_server']
@@ -218,11 +215,8 @@ def suricata_update() -> None:
 
     suricata_importer = SuricataImporter(al_client)
 
-    for path_in_dir, _, files in os.walk(UPDATE_DIR):
-        for filename in files:
-            source_name = os.path.splitext(os.path.basename(filename))[0]
-            filepath = os.path.join(UPDATE_DIR, path_in_dir, filename)
-            suricata_importer.import_file(filepath, source_name)
+    for file in all_files:
+        suricata_importer.import_file(file[1], file[0])
 
     previous_update = update_config.get('previous_update', '')
     if al_client.signature.update_available(since=previous_update, sig_type='suricata')['update_available']:
