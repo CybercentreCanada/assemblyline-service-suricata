@@ -17,6 +17,7 @@ from git import Repo
 
 from assemblyline.common import log as al_log
 from assemblyline.common.digests import get_sha256_for_file
+from assemblyline.common.isotime import iso_to_epoch
 from suricata_.suricata_importer import SuricataImporter
 
 al_log.init_logging('service_updater')
@@ -55,7 +56,7 @@ def url_download(source: Dict[str, Any], previous_update: Optional[float] = None
             last_modified = time.mktime(time.strptime(last_modified, "%a, %d %b %Y %H:%M:%S %Z"))
 
             # Compare the last modified time with the last updated time
-            if previous_update and last_modified < previous_update:
+            if previous_update and last_modified <= previous_update:
                 # File has not been modified since last update, do nothing
                 return [], []
 
@@ -175,7 +176,7 @@ def suricata_update() -> None:
             suricata_sources.append(('local', clone_dir))
         else:
             suricata_sources.append(('url', source['uri']))
-            previous_update = update_config.get('previous_update', None)
+            previous_update = iso_to_epoch(update_config.get('previous_update', None))
             files, sha256 = url_download(source, previous_update=previous_update)
             for file in files:
                 all_files.append((source_name, file))
@@ -215,7 +216,7 @@ def suricata_update() -> None:
 
     suricata_importer = SuricataImporter(al_client)
 
-    for file in all_files:
+    for file in all_files[5:6]:
         suricata_importer.import_file(file[1], file[0])
 
     previous_update = update_config.get('previous_update', '')
@@ -230,11 +231,6 @@ def suricata_update() -> None:
                 zip_f.extractall(UPDATE_OUTPUT_PATH)
 
             os.remove(temp_zip_file)
-
-    combined_suricata_rules_path = '/var/lib/suricata/rules/suricata.rules'
-    output_path = os.path.join(UPDATE_OUTPUT_PATH, 'suricata.rules')
-    if os.path.exists(combined_suricata_rules_path):
-        shutil.copyfile(combined_suricata_rules_path, output_path)
 
     # Create the response yaml
     with open(os.path.join(UPDATE_OUTPUT_PATH, 'response.yaml'), 'w') as yml_fh:
