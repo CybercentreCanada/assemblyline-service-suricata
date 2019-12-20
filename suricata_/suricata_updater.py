@@ -216,7 +216,7 @@ def suricata_update() -> None:
 
     suricata_importer = SuricataImporter(al_client)
 
-    for file in all_files[5:6]:
+    for file in all_files:
         suricata_importer.import_file(file[1], file[0])
 
     previous_update = update_config.get('previous_update', '')
