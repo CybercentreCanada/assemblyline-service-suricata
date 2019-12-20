@@ -12,7 +12,7 @@ from zipfile import ZipFile
 
 import requests
 import yaml
-from assemblyline_client import Client
+from assemblyline_client import get_client
 from git import Repo
 
 from assemblyline.common import log as al_log
@@ -74,6 +74,9 @@ def url_download(source: Dict[str, Any], previous_update: Optional[float] = None
             # File has not been modified since last update, do nothing
             return
         elif response.ok:
+            if not os.path.exists(UPDATE_DIR):
+                os.makedirs(UPDATE_DIR)
+
             file_name = os.path.basename(urlparse(uri).path)
             file_path = os.path.join(UPDATE_DIR, file_name)
             with open(file_path, 'wb') as f:
@@ -89,6 +92,9 @@ def url_download(source: Dict[str, Any], previous_update: Optional[float] = None
                     for filename in files:
                         filepath = os.path.join(extract_dir, path_in_dir, filename)
                         rules_files.add(filepath)
+
+                # Delete the tar.gz file
+                os.remove(file_path)
 
             return list(rules_files) or [file_path], [get_sha256_for_file(file_path)]
     except requests.Timeout:
@@ -208,7 +214,7 @@ def suricata_update() -> None:
     server = update_config['ui_server']
     user = update_config['api_user']
     api_key = update_config['api_key']
-    al_client = Client(server, apikey=(user, api_key), verify=False)
+    al_client = get_client(server, apikey=(user, api_key), verify=False)
 
     suricata_importer = SuricataImporter(al_client)
 
