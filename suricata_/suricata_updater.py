@@ -38,6 +38,7 @@ def url_download(source: Dict[str, Any], previous_update: Optional[float] = None
     """
     name = source['name']
     uri = source['uri']
+    pattern = source.get('pattern', None)
     username = source.get('username', None)
     password = source.get('password', None)
     auth = (username, password) if username and password else None
@@ -91,7 +92,11 @@ def url_download(source: Dict[str, Any], previous_update: Optional[float] = None
                 for path_in_dir, _, files in os.walk(extract_dir):
                     for filename in files:
                         filepath = os.path.join(extract_dir, path_in_dir, filename)
-                        rules_files.add(filepath)
+                        if pattern:
+                            if re.match(pattern, filename):
+                                rules_files.add(filepath)
+                        else:
+                            rules_files.add(filepath)
 
             return list(rules_files) or [file_path], [get_sha256_for_file(file_path)]
     except requests.Timeout:
@@ -135,7 +140,7 @@ def git_clone_repo(source: Dict[str, Any]) -> List[str] and List[str]:
     if pattern:
         files = [os.path.join(clone_dir, f) for f in os.listdir(clone_dir) if re.match(pattern, f)]
     else:
-        files = glob.glob(os.path.join(clone_dir, '*.yar*'))
+        files = glob.glob(os.path.join(clone_dir, '*.rules*'))
 
     files_sha256 = [get_sha256_for_file(x) for x in files]
 
