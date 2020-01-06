@@ -47,7 +47,7 @@ class Suricata(ServiceBase):
                                not x.startswith('.tmp')]
 
         for suricata_rules_dir in suricata_rules_dirs:
-            self.suricata_rules_file = os.path.join(suricata_rules_dir, 'suricata.rules')
+            self.suricata_rules_file = os.path.join(FILE_UPDATE_DIRECTORY, suricata_rules_dir, 'suricata.rules')
             self.run_dir = tempfile.mkdtemp(dir="/tmp")
             self.replace_suricata_config()
             self.start_suricata_if_necessary()
