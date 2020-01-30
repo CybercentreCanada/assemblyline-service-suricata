@@ -2,9 +2,9 @@ import json
 import os
 import shutil
 import subprocess
-import tempfile
+import sys
 import time
-import uuid
+from io import StringIO
 
 import dateutil.parser as dateparser
 import suricatasc
@@ -15,7 +15,7 @@ from assemblyline_v4_service.common.base import ServiceBase
 from assemblyline_v4_service.common.result import Result, ResultSection
 
 SURICATA_BIN = "/usr/local/bin/suricata"
-FILE_UPDATE_DIRECTORY = os.environ.get('FILE_UPDATE_DIRECTORY')
+FILE_UPDATE_DIRECTORY = os.environ.get('FILE_UPDATE_DIRECTORY', '/mount/update_root/')
 
 
 class Suricata(ServiceBase):
@@ -31,11 +31,13 @@ class Suricata(ServiceBase):
         self.suricata_rules_file = None
 
     # Use an external tool to strip frame headers
-    def strip_frame_headers(self, filepath):
+    @staticmethod
+    def strip_frame_headers(filepath):
         new_filepath = os.path.join(os.path.dirname(filepath), "striped.pcap")
         command = ["/usr/local/bin/stripe", "-r", filepath, "-w", new_filepath]
 
-        subprocess.call(command)
+        p = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        _, _ = p.communicate()
 
         return new_filepath
 
@@ -43,12 +45,14 @@ class Suricata(ServiceBase):
         if not os.path.exists(FILE_UPDATE_DIRECTORY):
             raise Exception("Suricata rules directory not found")
 
+        if not os.path.exists(self.run_dir):
+            os.makedirs(self.run_dir)
+
         suricata_rules_dirs = [x for x in sorted(os.listdir(FILE_UPDATE_DIRECTORY), reverse=True) if
                                not x.startswith('.tmp')]
 
         for suricata_rules_dir in suricata_rules_dirs:
             self.suricata_rules_file = os.path.join(FILE_UPDATE_DIRECTORY, suricata_rules_dir, 'suricata.rules')
-            self.run_dir = tempfile.mkdtemp(dir="/tmp")
             self.replace_suricata_config()
             self.start_suricata_if_necessary()
             if self.suricata_running():
@@ -57,7 +61,8 @@ class Suricata(ServiceBase):
         if not self.suricata_running():
             raise Exception("Unable to start Suricata because no Suricata rules were found")
 
-    def _get_suricata_version(self):
+    @staticmethod
+    def _get_suricata_version():
         version_string = subprocess.check_output(["suricata", "-V"]).strip().replace(b"This is Suricata version ",
                                                                                      b"").replace(b" ", b"_")
         return safe_str(version_string)
@@ -118,7 +123,7 @@ class Suricata(ServiceBase):
 
     def start_suricata_if_necessary(self):
         if not self.suricata_running():
-            self.launch_suricata()
+            self.launch_or_load_suricata()
 
     # Try connecting to the Suricata socket
     def suricata_running(self):
@@ -137,21 +142,22 @@ class Suricata(ServiceBase):
         return self.suricata_running()
 
     # Launch Suricata using a UID socket
-    def launch_suricata(self):
-        self.suricata_socket = os.path.join(self.run_dir, str(uuid.uuid4()) + '.socket')
+    def launch_or_load_suricata(self):
+        self.suricata_socket = os.path.join(self.run_dir, 'suricata.socket')
 
-        command = [
-            SURICATA_BIN,
-            "-c", os.path.join(self.run_dir, 'suricata.yaml'),
-            f"--unix-socket={self.suricata_socket}",
-            "--pidfile", f"{self.run_dir}/suricata.pid",
-            "--set", f"logging.outputs.1.file.filename={os.path.join(self.run_dir, 'suricata.log')}",
-            "-S", self.suricata_rules_file,
-        ]
+        if not os.path.exists(self.suricata_socket):
+            command = [
+                SURICATA_BIN,
+                "-c", os.path.join(self.run_dir, 'suricata.yaml'),
+                f"--unix-socket={self.suricata_socket}",
+                "--pidfile", f"{self.run_dir}/suricata.pid",
+                "--set", f"logging.outputs.1.file.filename={os.path.join(self.run_dir, 'suricata.log')}",
+                "-S", self.suricata_rules_file,
+            ]
 
-        self.log.info(f"Launching Suricata: {' '.join(command)}")
+            self.log.info(f"Launching Suricata: {' '.join(command)}")
 
-        self.suricata_process = subprocess.Popen(command)
+            self.suricata_process = subprocess.Popen(command)
 
         self.suricata_sc = suricatasc.SuricataSC(self.suricata_socket)
 
@@ -180,6 +186,15 @@ class Suricata(ServiceBase):
         if os.stat(stripped_filepath).st_size == 0:
             stripped_filepath = file_path
 
+        # Switch stdout and stderr so we don't get our logs polluted
+        mystdout = StringIO()
+        old_stdout = sys.stdout
+        sys.stdout = mystdout
+
+        mystderr = StringIO()
+        old_stderr = sys.stderr
+        sys.stderr = mystderr
+
         # Pass the pcap file to Suricata via the socket
         ret = self.suricata_sc.send_command("pcap-file", {
             "filename": stripped_filepath,
@@ -196,6 +211,11 @@ class Suricata(ServiceBase):
 
             if ret and ret["message"] == "None":
                 break
+
+        # Bring back stdout and stderr
+        sys.stdout = old_stdout
+        sys.stderr = old_stderr
+        # NOTE: for now we will ignore content of mystdout and mystderr but we have them just in case...
 
         alerts = {}
         signatures = {}
