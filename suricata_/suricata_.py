@@ -25,9 +25,9 @@ class Suricata(ServiceBase):
         self.suricata_sc = None
         self.suricata_process = None
         self.last_rule_reload = None
+        self.run_dir = "/tmp/suricata_run"
         self.home_net = self.config.get("home_net", "any")
         self.oinkmaster_update_file = '/etc/suricata/suricata-rules-update'
-        self.run_dir = None
         self.suricata_rules_file = None
 
     # Use an external tool to strip frame headers
