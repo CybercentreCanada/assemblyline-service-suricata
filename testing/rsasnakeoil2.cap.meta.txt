@@ -1,1 +1,0 @@
-rsasnakeoil2.cap retrieved from https://wiki.wireshark.org/SampleCaptures#SSL_with_decryption_keys - used to test SSL metadata extraction
