@@ -1,0 +1,58 @@
+name: Suricata
+version: 1
+description: This service scans network files.
+
+accepts: network/.*
+rejects: empty|metadata/.*
+
+stage: CORE
+category: Networking
+
+file_required: true
+timeout: 60
+disable_cache: false
+
+enabled: true
+is_external: false
+licence_count: 0
+
+config:
+  sure_score: ["MALWARE", "TROJAN", "CURRENT_EVENTS", "CnC", "Checkin"]
+  vhigh_score: ["EXPLOIT", "SCAN", "Adware", "PUP"]
+  home_net: any
+
+submission_params:
+  - default: true
+    name: extract_files
+    type: bool
+    value: true
+
+heuristics:
+  - heur_id: 1
+    name: Suricata signature hit with sure score
+    score: 1000
+    filetype: network/.*
+    description: Suricata signature hit with sure score
+
+  - heur_id: 2
+    name: Suricata signature hit with very high score
+    score: 500
+    filetype: network/.*
+    description: Suricata signature hit with very high score
+
+docker_config:
+  image: cccs/assemblyline-service-suricata:latest
+  cpu_cores: 1
+  ram_mb: 1024
+
+update_config:
+  generates_signatures: true
+  method: run
+  run_options:
+    allow_internet_access: true
+    command: ["python", "-m", "suricata_.suricata_updater"]
+    image: cccs/assemblyline-service-suricata:latest
+  sources:
+    - name: emerging_threats
+      uri: https://rules.emergingthreats.net/open/suricata/emerging.rules.tar.gz
+  update_interval_seconds: 21600 # Quarter-day (every 6 hours)

@@ -7,8 +7,8 @@ At this point, it doesn't make any effort to score anything that may be malware 
 
 """
 import json
+
 import requests
-import pprint
 from assemblyline.al.common import forge
 
 
