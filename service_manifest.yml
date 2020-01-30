@@ -53,6 +53,7 @@ update_config:
     command: ["python", "-m", "suricata_.suricata_updater"]
     image: cccs/assemblyline-service-suricata:latest
   sources:
-    - name: emerging_threats
+    - name: emt
+      pattern: .*\.rules
       uri: https://rules.emergingthreats.net/open/suricata/emerging.rules.tar.gz
   update_interval_seconds: 21600 # Quarter-day (every 6 hours)
