@@ -3,6 +3,7 @@ FROM cccs/assemblyline-v4-service-base:latest
 ENV SERVICE_PATH suricata_.suricata_.Suricata
 ENV SURICATA_VERSION 4.1.2
 
+# Install APT dependancies
 RUN apt-get update && apt-get install -y \
   git \
   libpcre3 \
@@ -30,6 +31,7 @@ RUN apt-get update && apt-get install -y \
   libnss3-dev \
   liblz4-dev
 
+# Install PIP dependancies
 RUN pip install \
   gitpython \
   simplejson \
@@ -37,25 +39,34 @@ RUN pip install \
   suricata-update \
   retrying
 
+# Build suricata
 RUN wget -O /tmp/suricata-${SURICATA_VERSION}.tar.gz https://www.openinfosecfoundation.org/download/suricata-${SURICATA_VERSION}.tar.gz
 RUN tar -xvzf /tmp/suricata-${SURICATA_VERSION}.tar.gz -C /tmp
 WORKDIR /tmp/suricata-${SURICATA_VERSION}
 RUN ./configure --prefix=/usr/local/ --sysconfdir=/etc/ --localstatedir=/var/ --enable-python --enable-rust --enable-lua \
   && make -C /tmp/suricata-${SURICATA_VERSION} && make -C /tmp/suricata-${SURICATA_VERSION} install && ldconfig && \
   make -C /tmp/suricata-${SURICATA_VERSION} install-full
+
+# Install suricata pip package
+RUN pip install /tmp/suricata-${SURICATA_VERSION}/python
+
+# Create all suricata directories and set permissions
+RUN mkdir -p /mount/update_root && chown -R /mount/update_root
 RUN mkdir -p /etc/suricata && chown -R assemblyline /etc/suricata
 RUN mkdir -p /var/lib/suricata && chown -R assemblyline /var/lib/suricata
 RUN mkdir -p /var/log/suricata && chown -R assemblyline /var/log/suricata
+
+# Update suricata config
 COPY suricata_/conf/suricata.yaml /etc/suricata/
 RUN chown assemblyline /etc/suricata/suricata.yaml
 RUN sed -i -e 's/__HOME_NET__/any/g' /etc/suricata/suricata.yaml
 
 # Update local rules using suricata-update script here
-
 RUN touch /etc/suricata/suricata-rules-update
 RUN chown -R assemblyline /var/lib/suricata/
 RUN chown assemblyline /etc/suricata/suricata-rules-update
 
+# Install stripe
 COPY suricata_/stripe/* /tmp/stripe/
 RUN /usr/bin/gcc -o /tmp/stripe/stripe /tmp/stripe/stripe.c
 RUN cp /tmp/stripe/stripe /usr/local/bin/stripe
