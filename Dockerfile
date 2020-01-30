@@ -48,7 +48,8 @@ RUN ./configure --prefix=/usr/local/ --sysconfdir=/etc/ --localstatedir=/var/ --
   make -C /tmp/suricata-${SURICATA_VERSION} install-full
 
 # Install suricata pip package
-RUN pip install /tmp/suricata-${SURICATA_VERSION}/python
+# RUN pip install /tmp/suricata-${SURICATA_VERSION}/python
+# Not needed because installed during build OP
 
 # Create all suricata directories and set permissions
 RUN mkdir -p /mount/update_root && chown -R /mount/update_root
