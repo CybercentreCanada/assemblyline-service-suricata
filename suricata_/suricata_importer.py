@@ -28,31 +28,30 @@ class SuricataImporter:
         saved_sigs = []
         order = 1
         for signature in signatures:
-            if signature.enabled:
-                name = signature.sid
-                status = "DEPLOYED"
+            name = signature.sid
+            status = "DEPLOYED" if signature.enabled else "DISABLED"
 
-                sig = Signature(dict(
-                    classification=self.classification.UNRESTRICTED,
-                    data=signature.raw,
-                    name=signature.msg or name,
-                    order=order,
-                    revision=int(float(signature.rev)),
-                    signature_id=name,
-                    source=source,
-                    status=status,
-                    type="suricata",
-                ))
-                try:
-                    r = self.update_client.signature.add_update(sig.as_primitives(), dedup_name=False)
-                    if r['success']:
-                        self.log.info(f"Successfully added signature {name} (ID: {r['id']})")
-                        saved_sigs.append(sig)
-                        order += 1
-                    else:
-                        self.log.warning(f"Failed to add signature {name}")
-                except ClientError as e:
-                    self.log.warning(f"Failed to add signature {name}: {str(e)}")
+            sig = Signature(dict(
+                classification=self.classification.UNRESTRICTED,
+                data=signature.raw,
+                name=signature.msg or name,
+                order=order,
+                revision=int(float(signature.rev)),
+                signature_id=name,
+                source=source,
+                status=status,
+                type="suricata",
+            ))
+            try:
+                r = self.update_client.signature.add_update(sig.as_primitives(), dedup_name=False)
+                if r['success']:
+                    self.log.info(f"Successfully added signature {name} (ID: {r['id']})")
+                    saved_sigs.append(sig)
+                    order += 1
+                else:
+                    self.log.warning(f"Failed to add signature {name}")
+            except ClientError as e:
+                self.log.warning(f"Failed to add signature {name}: {str(e)}")
 
         self.log.info(f"Imported {order - 1} signatures from {source} into Assemblyline")
 
