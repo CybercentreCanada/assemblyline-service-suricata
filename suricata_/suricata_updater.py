@@ -189,15 +189,15 @@ def suricata_update() -> None:
         if uri.endswith('.git'):
             files = git_clone_repo(source, previous_update=previous_update)
             for file, sha256 in files:
-                key = (source_name, file)
-                if previous_hash.get(key, None) != sha256:
-                    files_sha256[(source_name, file)] = sha256
+                files_sha256.setdefault(source_name, {})
+                if previous_hash.get(source_name, {}).get(file, None) != sha256:
+                    files_sha256[source_name][file] = sha256
         else:
             files = url_download(source, previous_update=previous_update)
             for file, sha256 in files:
-                key = (source_name, file)
-                if previous_hash.get(key, None) != sha256:
-                    files_sha256[(source_name, file)] = sha256
+                files_sha256.setdefault(source_name, {})
+                if previous_hash.get(source_name, {}).get(file, None) != sha256:
+                    files_sha256[source_name][file] = sha256
 
     if not files_sha256:
         LOGGER.info('No Suricata rule file(s) downloaded')
@@ -213,8 +213,9 @@ def suricata_update() -> None:
 
     suricata_importer = SuricataImporter(al_client)
 
-    for source, file in files_sha256.keys():
-        suricata_importer.import_file(file, source)
+    for source, source_val in files_sha256.keys():
+        for file in source_val.keys():
+            suricata_importer.import_file(file, source)
 
     if al_client.signature.update_available(since=previous_update or '', sig_type='suricata')['update_available']:
         LOGGER.info("AN UPDATE IS AVAILABLE TO DOWNLOAD")
