@@ -213,7 +213,7 @@ def suricata_update() -> None:
 
     suricata_importer = SuricataImporter(al_client)
 
-    for source, source_val in files_sha256.keys():
+    for source, source_val in files_sha256.items():
         for file in source_val.keys():
             suricata_importer.import_file(file, source)
 
