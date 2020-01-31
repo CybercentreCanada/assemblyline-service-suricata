@@ -52,7 +52,7 @@ RUN ./configure --prefix=/usr/local/ --sysconfdir=/etc/ --localstatedir=/var/ --
 # Not needed because installed during build OP
 
 # Create all suricata directories and set permissions
-RUN mkdir -p /mount/update_root && chown -R /mount/update_root
+RUN mkdir -p /mount/update_root && chown -R assemblyline /mount/update_root
 RUN mkdir -p /etc/suricata && chown -R assemblyline /etc/suricata
 RUN mkdir -p /var/lib/suricata && chown -R assemblyline /var/lib/suricata
 RUN mkdir -p /var/log/suricata && chown -R assemblyline /var/log/suricata
