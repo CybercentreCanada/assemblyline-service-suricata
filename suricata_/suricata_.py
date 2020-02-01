@@ -385,9 +385,10 @@ class Suricata(ServiceBase):
                 section = ResultSection(f'{signature_id}: {signature}')
                 if any(x in signature for x in self.config.get("sure_score")):
                     section.set_heuristic(1)
-
-                if any(x in signature for x in self.config.get("vhigh_score")):
+                elif any(x in signature for x in self.config.get("vhigh_score")):
                     section.set_heuristic(2)
+                else:
+                    section.set_heuristic(3)
 
                 for flow in alerts[signature_id][:10]:
                     section.add_line(flow)

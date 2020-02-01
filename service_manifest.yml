@@ -29,16 +29,22 @@ submission_params:
 
 heuristics:
   - heur_id: 1
-    name: Suricata signature hit with sure score
+    name: Malicious network signature
     score: 1000
     filetype: network/.*
-    description: Suricata signature hit with sure score
+    description: Suricata signature hit with malicious score
 
   - heur_id: 2
-    name: Suricata signature hit with very high score
+    name: Suspicious network signature
     score: 500
     filetype: network/.*
-    description: Suricata signature hit with very high score
+    description: Suricata signature hit with suspicious score
+
+  - heur_id: 3
+    name: Informational network signature
+    score: 10
+    filetype: network/.*
+    description: Suricata basic signature hit
 
 docker_config:
   image: cccs/assemblyline-service-suricata:latest
