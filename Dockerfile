@@ -43,8 +43,9 @@ RUN pip install \
 RUN wget -O /tmp/suricata-${SURICATA_VERSION}.tar.gz https://www.openinfosecfoundation.org/download/suricata-${SURICATA_VERSION}.tar.gz
 RUN tar -xvzf /tmp/suricata-${SURICATA_VERSION}.tar.gz -C /tmp
 WORKDIR /tmp/suricata-${SURICATA_VERSION}
-RUN ./configure --prefix=/usr/local/ --sysconfdir=/etc/ --localstatedir=/var/ --enable-python --enable-rust --enable-lua \
-  && make -C /tmp/suricata-${SURICATA_VERSION} && make -C /tmp/suricata-${SURICATA_VERSION} install && ldconfig && \
+RUN ./configure --disable-gccmarch-native --prefix=/usr/local/ --sysconfdir=/etc/ --localstatedir=/var/ \
+  --enable-python --enable-rust --enable-lua && make -C /tmp/suricata-${SURICATA_VERSION} && \
+  make -C /tmp/suricata-${SURICATA_VERSION} install && ldconfig && \
   make -C /tmp/suricata-${SURICATA_VERSION} install-full
 
 # Install suricata pip package
