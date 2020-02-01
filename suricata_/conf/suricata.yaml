@@ -1847,9 +1847,8 @@ mpipe:
 ## file configuration".
 ##
 
-default-rule-path: /var/lib/suricata/rules
-rule-files:
- - suricata.rules
+default-rule-path: /mount/updates
+__RULE_FILES__
 
 ##
 ## Advanced rule file configuration.

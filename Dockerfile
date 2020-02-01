@@ -57,11 +57,13 @@ RUN mkdir -p /mount/updates && chown -R assemblyline /mount/updates
 RUN mkdir -p /etc/suricata && chown -R assemblyline /etc/suricata
 RUN mkdir -p /var/lib/suricata && chown -R assemblyline /var/lib/suricata
 RUN mkdir -p /var/log/suricata && chown -R assemblyline /var/log/suricata
+RUN mkdir -p /var/run/suricata && chown -R assemblyline /var/run/suricata
 
 # Update suricata config
 COPY suricata_/conf/suricata.yaml /etc/suricata/
 RUN chown assemblyline /etc/suricata/suricata.yaml
 RUN sed -i -e 's/__HOME_NET__/any/g' /etc/suricata/suricata.yaml
+RUN sed -i -e 's/__RULE_FILES__/rule_files: []/g' /etc/suricata/suricata.yaml
 
 # Update local rules using suricata-update script here
 RUN touch /etc/suricata/suricata-rules-update

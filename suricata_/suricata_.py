@@ -1,10 +1,12 @@
 import json
 import os
-import shutil
 import subprocess
 import sys
 import time
+import yaml
+
 from io import StringIO
+from pathlib import Path
 
 import dateutil.parser as dateparser
 import suricatasc
@@ -24,11 +26,13 @@ class Suricata(ServiceBase):
         self.suricata_socket = None
         self.suricata_sc = None
         self.suricata_process = None
+        self.suricata_yaml = "/etc/suricata/suricata.yaml"
+        self.suricata_log = "/var/log/suricata/suricata.log"
         self.last_rule_reload = None
-        self.run_dir = "/tmp/suricata_run"
+        self.run_dir = "/var/run/suricata"
         self.home_net = self.config.get("home_net", "any")
         self.oinkmaster_update_file = '/etc/suricata/suricata-rules-update'
-        self.suricata_rules_file = None
+        self.rules_config = yaml.safe_dump({"rule_files": []})
 
     # Use an external tool to strip frame headers
     @staticmethod
@@ -45,21 +49,25 @@ class Suricata(ServiceBase):
         if not os.path.exists(FILE_UPDATE_DIRECTORY):
             raise Exception("Suricata rules directory not found")
 
+        suricata_files = [str(f) for f in Path(FILE_UPDATE_DIRECTORY).rglob("*") if os.path.isfile(str(f))]
+        self.rules_config = yaml.safe_dump({"rule-files": suricata_files})
+
         if not os.path.exists(self.run_dir):
             os.makedirs(self.run_dir)
 
-        suricata_rules_dirs = [x for x in sorted(os.listdir(FILE_UPDATE_DIRECTORY), reverse=True) if
-                               not x.startswith('.tmp')]
-
-        for suricata_rules_dir in suricata_rules_dirs:
-            self.suricata_rules_file = os.path.join(FILE_UPDATE_DIRECTORY, suricata_rules_dir, 'suricata.rules')
-            self.replace_suricata_config()
-            self.start_suricata_if_necessary()
-            if self.suricata_running():
-                break
+        self.replace_suricata_config()
+        self.start_suricata_if_necessary()
 
         if not self.suricata_running():
             raise Exception("Unable to start Suricata because no Suricata rules were found")
+
+        # Get rule stats
+        ret = self.suricata_sc.send_command("ruleset-stats")
+        if ret:
+            for ruleset in ret.get('message'):
+                self.log.info(f"Ruleset {ruleset['id']}: {ruleset['rules_loaded']} rules loaded")
+                if ruleset['rules_failed']:
+                    self.log.error(f"Ruleset {ruleset['id']}: {ruleset['rules_failed']} rules failed to load")
 
     @staticmethod
     def _get_suricata_version():
@@ -77,10 +85,6 @@ class Suricata(ServiceBase):
     # When we're shutting down, kill the Suricata child process as well
     def stop(self):
         self.kill_suricata()
-        if self.run_dir is not None:
-            if os.path.exists(self.run_dir):
-                shutil.rmtree(self.run_dir)
-            self.run_dir = None
 
     # Kill the process if it isn't ending
     def kill_suricata(self):
@@ -94,12 +98,12 @@ class Suricata(ServiceBase):
     # Reapply our service configuration to the Suricata yaml configuration
     def replace_suricata_config(self):
         source_path = os.path.join(os.getcwd(), 'suricata_', 'conf', 'suricata.yaml')
-        dest_path = os.path.join(self.run_dir, 'suricata.yaml')
+        dest_path = self.suricata_yaml
         # home_net = re.sub(r"([/\[\]])", r"\\\1", self.home_net)
         home_net = self.home_net
         with open(source_path) as sp:
             with open(dest_path, "w") as dp:
-                dp.write(sp.read().replace("__HOME_NET__", home_net))
+                dp.write(sp.read().replace("__HOME_NET__", home_net).replace("__RULE_FILES__", self.rules_config))
 
     def reload_rules_if_necessary(self):
         if self.last_rule_reload < os.path.getmtime(self.oinkmaster_update_file):
@@ -148,11 +152,10 @@ class Suricata(ServiceBase):
         if not os.path.exists(self.suricata_socket):
             command = [
                 SURICATA_BIN,
-                "-c", os.path.join(self.run_dir, 'suricata.yaml'),
+                "-c", self.suricata_yaml,
                 f"--unix-socket={self.suricata_socket}",
                 "--pidfile", f"{self.run_dir}/suricata.pid",
-                "--set", f"logging.outputs.1.file.filename={os.path.join(self.run_dir, 'suricata.log')}",
-                "-S", self.suricata_rules_file,
+                "--set", f"logging.outputs.1.file.filename={self.suricata_log}",
             ]
 
             self.log.info(f"Launching Suricata: {' '.join(command)}")
