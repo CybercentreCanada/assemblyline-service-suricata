@@ -49,7 +49,12 @@ class Suricata(ServiceBase):
         if not os.path.exists(FILE_UPDATE_DIRECTORY):
             raise Exception("Suricata rules directory not found")
 
-        suricata_files = [str(f) for f in Path(FILE_UPDATE_DIRECTORY).rglob("*") if os.path.isfile(str(f))]
+        rules_directory = max([os.path.join(FILE_UPDATE_DIRECTORY, d) for d in os.listdir(FILE_UPDATE_DIRECTORY)
+                               if os.path.isdir(os.path.join(FILE_UPDATE_DIRECTORY, d)) and not d.startswith('.tmp')],
+                              key=os.path.getctime)
+
+        suricata_files = [os.path.relpath(str(f), start=FILE_UPDATE_DIRECTORY)
+                          for f in Path(rules_directory).rglob("*") if os.path.isfile(str(f))]
         self.rules_config = yaml.safe_dump({"rule-files": suricata_files})
 
         if not os.path.exists(self.run_dir):
@@ -135,7 +140,8 @@ class Suricata(ServiceBase):
             return False
         try:
             self.suricata_sc.connect()
-        except suricatasc.SuricataException:
+        except suricatasc.SuricataException as e:
+            self.log.warning(f"Suricata not started yet: {str(e)}")
             return False
         return True
 
