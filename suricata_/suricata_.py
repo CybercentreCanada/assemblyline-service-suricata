@@ -56,6 +56,7 @@ class Suricata(ServiceBase):
         suricata_files = [os.path.relpath(str(f), start=FILE_UPDATE_DIRECTORY)
                           for f in Path(rules_directory).rglob("*") if os.path.isfile(str(f))]
         self.rules_config = yaml.safe_dump({"rule-files": suricata_files})
+        self.log.info(f"Suricata will load the following rules: {suricata_files}")
 
         if not os.path.exists(self.run_dir):
             os.makedirs(self.run_dir)
@@ -141,7 +142,7 @@ class Suricata(ServiceBase):
         try:
             self.suricata_sc.connect()
         except suricatasc.SuricataException as e:
-            self.log.warning(f"Suricata not started yet: {str(e)}")
+            self.log.info(f"Suricata not started yet: {str(e)}")
             return False
         return True
 
