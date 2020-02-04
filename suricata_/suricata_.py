@@ -1,18 +1,19 @@
+import dateutil.parser as dateparser
+import hashlib
 import json
 import os
 import subprocess
+import suricatasc
 import sys
 import time
 import yaml
 
 from io import StringIO
 from pathlib import Path
-
-import dateutil.parser as dateparser
-import suricatasc
-from assemblyline.common.str_utils import safe_str
 from retrying import retry
 
+from assemblyline.common.str_utils import safe_str
+from assemblyline.common.digests import get_sha256_for_file
 from assemblyline_v4_service.common.base import ServiceBase
 from assemblyline_v4_service.common.result import Result, ResultSection
 
@@ -23,16 +24,19 @@ FILE_UPDATE_DIRECTORY = os.environ.get('FILE_UPDATE_DIRECTORY', '/mount/updates/
 class Suricata(ServiceBase):
     def __init__(self, config=None):
         super(Suricata, self).__init__(config)
+
+        self.home_net = self.config.get("home_net", "any")
+        self.rules_config = yaml.safe_dump({"rule_files": []})
+        self.rules_list = []
+        self.run_dir = "/var/run/suricata"
         self.suricata_socket = None
         self.suricata_sc = None
         self.suricata_process = None
         self.suricata_yaml = "/etc/suricata/suricata.yaml"
         self.suricata_log = "/var/log/suricata/suricata.log"
-        self.last_rule_reload = None
-        self.run_dir = "/var/run/suricata"
-        self.home_net = self.config.get("home_net", "any")
-        self.oinkmaster_update_file = '/etc/suricata/suricata-rules-update'
-        self.rules_config = yaml.safe_dump({"rule_files": []})
+
+        # Load rules
+        self.rules_hash = self._get_rules_hash()
 
     # Use an external tool to strip frame headers
     @staticmethod
@@ -46,17 +50,10 @@ class Suricata(ServiceBase):
         return new_filepath
 
     def start(self):
-        if not os.path.exists(FILE_UPDATE_DIRECTORY):
-            raise Exception("Suricata rules directory not found")
+        if not self.rules_list:
+            self.log.warning("No valid suricata ruleset found. Suricata will run without rules...")
 
-        rules_directory = max([os.path.join(FILE_UPDATE_DIRECTORY, d) for d in os.listdir(FILE_UPDATE_DIRECTORY)
-                               if os.path.isdir(os.path.join(FILE_UPDATE_DIRECTORY, d)) and not d.startswith('.tmp')],
-                              key=os.path.getctime)
-
-        suricata_files = [os.path.relpath(str(f), start=FILE_UPDATE_DIRECTORY)
-                          for f in Path(rules_directory).rglob("*") if os.path.isfile(str(f))]
-        self.rules_config = yaml.safe_dump({"rule-files": suricata_files})
-        self.log.info(f"Suricata will load the following rules: {suricata_files}")
+        self.rules_config = yaml.safe_dump({"rule-files": self.rules_list})
 
         if not os.path.exists(self.run_dir):
             os.makedirs(self.run_dir)
@@ -75,18 +72,46 @@ class Suricata(ServiceBase):
                 if ruleset['rules_failed']:
                     self.log.error(f"Ruleset {ruleset['id']}: {ruleset['rules_failed']} rules failed to load")
 
-    @staticmethod
-    def _get_suricata_version():
-        version_string = subprocess.check_output(["suricata", "-V"]).strip().replace(b"This is Suricata version ",
-                                                                                     b"").replace(b" ", b"_")
-        return safe_str(version_string)
+    def _get_rules_hash(self):
+        if not os.path.exists(FILE_UPDATE_DIRECTORY):
+            self.log.warning("Suricata rules directory not found")
+            return None
+
+        try:
+            rules_directory = max([os.path.join(FILE_UPDATE_DIRECTORY, d) for d in os.listdir(FILE_UPDATE_DIRECTORY)
+                                   if os.path.isdir(os.path.join(FILE_UPDATE_DIRECTORY, d))
+                                   and not d.startswith('.tmp')],
+                                  key=os.path.getctime)
+        except ValueError:
+            self.log.warning("Suricata rules directory not found")
+            return None
+
+        self.rules_list = [os.path.relpath(str(f), start=FILE_UPDATE_DIRECTORY)
+                           for f in Path(rules_directory).rglob("*") if os.path.isfile(str(f))]
+
+        all_sha256s = [get_sha256_for_file(os.path.join(FILE_UPDATE_DIRECTORY, f)) for f in self.rules_list]
+
+        self.log.info(f"Suricata will load the following rule files: {self.rules_list}")
+
+        if len(all_sha256s) == 1:
+            return all_sha256s[0][:7]
+
+        return hashlib.sha256(' '.join(sorted(all_sha256s)).encode('utf-8')).hexdigest()[:7]
 
     def get_tool_version(self):
         """
-        Use the modification timestamp of the rules file as well as the suricata version
+        Return the version of suricata used for processing
         :return:
         """
-        return f"{self._get_suricata_version()}-{os.path.getmtime(self.oinkmaster_update_file)}"
+        version_string = subprocess.check_output(["suricata", "-V"]).strip().replace(b"This is Suricata version ", b"")
+        return safe_str(version_string)
+
+    def get_service_version(self):
+        basic_version = super(Suricata, self).get_service_version()
+        if self.rules_hash and self.rules_hash not in basic_version:
+            return f'{basic_version}.r{self.rules_hash}'
+        else:
+            return basic_version
 
     # When we're shutting down, kill the Suricata child process as well
     def stop(self):
@@ -111,10 +136,6 @@ class Suricata(ServiceBase):
             with open(dest_path, "w") as dp:
                 dp.write(sp.read().replace("__HOME_NET__", home_net).replace("__RULE_FILES__", self.rules_config))
 
-    def reload_rules_if_necessary(self):
-        if self.last_rule_reload < os.path.getmtime(self.oinkmaster_update_file):
-            self.reload_rules()
-
     # Send the reload_rules command to the socket
     def reload_rules(self):
         self.log.info("Reloading suricata rules...")
@@ -123,8 +144,6 @@ class Suricata(ServiceBase):
         if not ret or ret.get("return", "") != "OK":
             self.log.exception("Failed to reload Suricata rules")
             return
-
-        self.last_rule_reload = time.time()
 
         # Get rule stats
         ret = self.suricata_sc.send_command("ruleset-stats")
@@ -173,20 +192,16 @@ class Suricata(ServiceBase):
 
         if not self.suricata_running_retry():
             raise Exception('Suricata could not be started.')
-        self.last_rule_reload = time.time()
 
     def execute(self, request):
         file_path = request.file_path
         result = Result()
 
         # Report the version of suricata as the service context
-        request.set_service_context(f"Suricata version: {self._get_suricata_version()}")
+        request.set_service_context(f"Suricata version: {self.get_tool_version()}")
 
         # restart Suricata if we need to
         self.start_suricata_if_necessary()
-
-        # Update our rules if they're stale,
-        self.reload_rules_if_necessary()
 
         # Strip frame headers from the PCAP, since Suricata sometimes has trouble parsing strange PCAPs
         stripped_filepath = self.strip_frame_headers(file_path)
