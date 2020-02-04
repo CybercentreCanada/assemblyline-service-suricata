@@ -249,7 +249,7 @@ class Suricata(ServiceBase):
         domains = []
         ips = []
         urls = []
-        net_email = []
+        email_addresses = []
 
         # tls stuff
         tls_dict = {}
@@ -312,13 +312,13 @@ class Suricata(ServiceBase):
                 mail_from = record["smtp"]["mail_from"]
                 if mail_from is not None:
                     mail_from = mail_from.replace("<", "").replace(">", "")
-                    if mail_from not in net_email:
-                        net_email.append(mail_from)
+                    if mail_from not in email_addresses:
+                        email_addresses.append(mail_from)
 
                 for email_addr in record["smtp"]["rcpt_to"]:
                     email_addr = email_addr.replace("<", "").replace(">", "")
-                    if email_addr not in net_email:
-                        net_email.append(email_addr)
+                    if email_addr not in email_addresses:
+                        email_addresses.append(email_addr)
 
             if record["event_type"] == "tls":
                 if "tls" not in record:
@@ -354,21 +354,33 @@ class Suricata(ServiceBase):
 
         # Add tags for the domains, urls, and IPs we've discovered
         root_section = ResultSection("Discovered IOCs", parent=result)
-        for domain in domains:
-            root_section.add_tag('network.static.domain', domain)
-        for url in urls:
-            root_section.add_tag('network.static.uri', url)
-        for ip in ips:
-            # Make sure it's not a local IP
-            if not (ip.startswith("127.")
-                    or ip.startswith("192.168.")
-                    or ip.startswith("10.")
-                    or (ip.startswith("172.")
-                        and 16 <= int(ip.split(".")[1]) <= 31)):
-                root_section.add_tag('network.static.ip', ip)
+        if domains:
+            domain_section = ResultSection("Domains", parent=root_section)
+            for domain in domains:
+                domain_section.add_line(domain)
+                domain_section.add_tag('network.static.domain', domain)
+        if ips:
+            ip_section = ResultSection("IP Addresses", parent=root_section)
+            for ip in ips:
+                # Make sure it's not a local IP
+                if not (ip.startswith("127.")
+                        or ip.startswith("192.168.")
+                        or ip.startswith("10.")
+                        or (ip.startswith("172.")
+                            and 16 <= int(ip.split(".")[1]) <= 31)):
+                    ip_section.add_line(ip)
+                    ip_section.add_tag('network.static.ip', ip)
 
-        for eml in net_email:
-            root_section.add_tag('network.email.address', eml)
+        if urls:
+            url_section = ResultSection("URLs", parent=root_section)
+            for url in urls:
+                url_section.add_line(url)
+                url_section.add_tag('network.static.uri', url)
+        if email_addresses:
+            email_section = ResultSection("URLs", parent=root_section)
+            for eml in email_addresses:
+                email_section.add_line(eml)
+                email_section.add_tag('network.email.address', eml)
 
         # Map between suricata key names and AL tag types
         tls_mappings = {
