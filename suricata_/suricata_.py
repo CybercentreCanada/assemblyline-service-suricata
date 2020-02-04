@@ -72,6 +72,8 @@ class Suricata(ServiceBase):
                 if ruleset['rules_failed']:
                     self.log.error(f"Ruleset {ruleset['id']}: {ruleset['rules_failed']} rules failed to load")
 
+        self.log.info(f"Suricata started with service version: {self.get_service_version()}")
+
     def _get_rules_hash(self):
         if not os.path.exists(FILE_UPDATE_DIRECTORY):
             self.log.warning("Suricata rules directory not found")
@@ -252,7 +254,7 @@ class Suricata(ServiceBase):
         # tls stuff
         tls_dict = {}
 
-        file_extracted_reported = False
+        file_extracted_section = None
 
         # Parse the json results of the service
         for line in open(os.path.join(self.working_directory, 'eve.json')):
@@ -344,9 +346,10 @@ class Suricata(ServiceBase):
 
                 # Report a null score to indicate that files were extracted. If no sigs hit, it's not clear
                 # where the extracted files came from
-                if not file_extracted_reported:
-                    file_extracted_reported = True
-                    result.add_section(ResultSection("Files extracted by suricata"))
+                if file_extracted_section is None:
+                    file_extracted_section = ResultSection("File(s) extracted by suricata", parent=result)
+
+                file_extracted_section.add_line(filename)
 
         # Add tags for the domains, urls, and IPs we've discovered
         root_section = ResultSection("Discovered IOCs")
