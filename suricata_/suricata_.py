@@ -350,9 +350,10 @@ class Suricata(ServiceBase):
                     file_extracted_section = ResultSection("File(s) extracted by suricata", parent=result)
 
                 file_extracted_section.add_line(filename)
+                file_extracted_section.add_tag('file.name.extracted', filename)
 
         # Add tags for the domains, urls, and IPs we've discovered
-        root_section = ResultSection("Discovered IOCs")
+        root_section = ResultSection("Discovered IOCs", parent=result)
         for domain in domains:
             root_section.add_tag('network.static.domain', domain)
         for url in urls:
