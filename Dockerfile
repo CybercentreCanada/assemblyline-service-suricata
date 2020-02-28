@@ -29,7 +29,8 @@ RUN apt-get update && apt-get install -y \
   cargo \
   liblua5.1-dev \
   libnss3-dev \
-  liblz4-dev
+  liblz4-dev \
+  wget && rm -rf /var/lib/apt/lists/*
 
 # Install PIP dependancies
 RUN pip install \
@@ -37,7 +38,7 @@ RUN pip install \
   simplejson \
   python-dateutil \
   suricata-update \
-  retrying
+  retrying && rm -rf ~/.cache/pip
 
 # Build suricata
 RUN wget -O /tmp/suricata-${SURICATA_VERSION}.tar.gz https://www.openinfosecfoundation.org/download/suricata-${SURICATA_VERSION}.tar.gz
