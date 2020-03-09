@@ -24,9 +24,9 @@ class SuricataImporter:
         self.classification = forge.get_classification()
         self.log = logger
 
-    def _save_signatures(self, signatures: List[Rule], source):
-        saved_sigs = []
+    def _save_signatures(self, signatures: List[Rule], source, cur_file):
         order = 1
+        upload_list = []
         for signature in signatures:
             name = signature.sid
             status = "DEPLOYED" if signature.enabled else "DISABLED"
@@ -42,26 +42,20 @@ class SuricataImporter:
                 status=status,
                 type="suricata",
             ))
-            try:
-                r = self.update_client.signature.add_update(sig.as_primitives(), dedup_name=False)
-                if r['success']:
-                    self.log.info(f"Successfully added signature {name} (ID: {r['id']})")
-                    saved_sigs.append(sig)
-                    order += 1
-                else:
-                    self.log.warning(f"Failed to add signature {name}")
-            except ClientError as e:
-                self.log.warning(f"Failed to add signature {name}: {str(e)}")
 
-        self.log.info(f"Imported {order - 1} signatures from {source} into Assemblyline")
+            upload_list.append(sig.as_primitives())
+            order += 1
 
-        return saved_sigs
+        r = self.update_client.signature.add_update_many(source, 'suricata', upload_list, dedup_name=False)
+        self.log.info(f"Imported {r['success']}/{order - 1} signatures from {os.path.basename(cur_file)} into Assemblyline")
+
+        return r['success']
 
     def import_file(self, file_path: str, source: str):
         self.log.info(f"Importing file: {file_path}")
         cur_file = os.path.expanduser(file_path)
         if os.path.exists(cur_file):
             signatures = parse_file(cur_file)
-            return self._save_signatures(signatures, source)
+            return self._save_signatures(signatures, source, cur_file)
         else:
             raise Exception(f"File {cur_file} does not exists.")

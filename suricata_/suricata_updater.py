@@ -214,8 +214,10 @@ def suricata_update() -> None:
     suricata_importer = SuricataImporter(al_client)
 
     for source, source_val in files_sha256.items():
+        total_imported = 0
         for file in source_val.keys():
-            suricata_importer.import_file(file, source)
+            total_imported += suricata_importer.import_file(file, source)
+        LOGGER.info(f"{total_imported} signatures were imported for source {source}")
 
     if al_client.signature.update_available(since=previous_update or '', sig_type='suricata')['update_available']:
         LOGGER.info("AN UPDATE IS AVAILABLE TO DOWNLOAD")
