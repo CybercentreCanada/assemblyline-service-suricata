@@ -34,6 +34,14 @@ RUN apt-get update && apt-get install -y \
   liblz4-dev \
   wget && rm -rf /var/lib/apt/lists/*
 
+# Install PIP dependancies
+RUN pip install \
+  gitpython \
+  simplejson \
+  python-dateutil \
+  suricata-update \
+  retrying && rm -rf ~/.cache/pip
+
 # Build suricata
 RUN wget -O /tmp/suricata-${SURICATA_VERSION}.tar.gz https://www.openinfosecfoundation.org/download/suricata-${SURICATA_VERSION}.tar.gz
 RUN tar -xvzf /tmp/suricata-${SURICATA_VERSION}.tar.gz -C /tmp
@@ -75,14 +83,6 @@ RUN rm -rf /tmp/*
 
 # Switch to assemblyline user
 USER assemblyline
-
-# Install PIP dependancies
-RUN pip install --user \
-  gitpython \
-  simplejson \
-  python-dateutil \
-  suricata-update \
-  retrying && rm -rf ~/.cache/pip
 
 # Copy Suricata service code
 WORKDIR /opt/al_service
