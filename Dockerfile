@@ -5,6 +5,8 @@ ENV SURICATA_VERSION 4.1.2
 
 USER root
 
+RUN echo 'deb http://deb.debian.org/debian stretch-backports main' >> /etc/apt/sources.list
+
 # Install APT dependancies
 RUN apt-get update && apt-get install -y \
   git \
@@ -14,6 +16,7 @@ RUN apt-get update && apt-get install -y \
   libyaml-0-2 \
   zlib1g \
   libcap-ng0 \
+  libhtp2 \
   libjansson4 \
   liblua5.1-0 \
   libnss3 \
