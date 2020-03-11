@@ -75,6 +75,9 @@ RUN make -C /tmp/suricata-${SURICATA_VERSION} install
 RUN ldconfig
 RUN make -C /tmp/suricata-${SURICATA_VERSION} install-full
 
+# Install suricata pip package
+RUN pip install --user /tmp/suricata-${SURICATA_VERSION}/python
+
 # Install stripe
 COPY suricata_/stripe/* /tmp/stripe/
 RUN /usr/bin/gcc -o /build/bin/stripe /tmp/stripe/stripe.c
@@ -93,10 +96,6 @@ COPY --chown=assemblyline:assemblyline --from=build /var/lib/assemblyline/.local
 COPY --from=build /build/ /usr/local/
 COPY --from=build /etc/suricata/ /etc/suricata/
 COPY --from=build /var/log/suricata/ /var/log/suricata/
-
-# Install suricata pip package
-# RUN pip install /tmp/suricata-${SURICATA_VERSION}/python
-# Not needed because installed during build OP
 
 # Create all suricata directories and set permissions
 RUN mkdir -p /mount/updates && chown -R assemblyline /mount/updates
