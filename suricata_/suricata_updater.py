@@ -15,12 +15,13 @@ import yaml
 from assemblyline_client import get_client
 from git import Repo
 
-from assemblyline.common import log as al_log
+from assemblyline.common import log as al_log, forge
 from assemblyline.common.digests import get_sha256_for_file
 from assemblyline.common.isotime import iso_to_epoch
 from suricata_.suricata_importer import SuricataImporter
 
 al_log.init_logging('service_updater')
+classification = forge.get_classification()
 
 LOGGER = logging.getLogger('assemblyline.service_updater')
 
@@ -181,10 +182,12 @@ def suricata_update() -> None:
         previous_hash = json.loads(previous_hash)
     sources = {source['name']: source for source in update_config['sources']}
     files_sha256 = {}
+    source_default_classification = {}
 
     # Go through each source and download file
     for source_name, source in sources.items():
         uri: str = source['uri']
+        source_default_classification[source_name] = source.get('default_classification', classification.UNRESTRICTED)
 
         if uri.endswith('.git'):
             files = git_clone_repo(source, previous_update=previous_update)
@@ -215,8 +218,9 @@ def suricata_update() -> None:
 
     for source, source_val in files_sha256.items():
         total_imported = 0
+        default_classification = source_default_classification[source]
         for file in source_val.keys():
-            total_imported += suricata_importer.import_file(file, source)
+            total_imported += suricata_importer.import_file(file, source, default_classification=default_classification)
         LOGGER.info(f"{total_imported} signatures were imported for source {source}")
 
     if al_client.signature.update_available(since=previous_update or '', sig_type='suricata')['update_available']:

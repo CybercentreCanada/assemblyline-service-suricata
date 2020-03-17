@@ -2,7 +2,6 @@ import logging
 import os
 from typing import List
 
-from assemblyline_client import ClientError
 from suricata.update.rule import Rule, parse_file
 
 from assemblyline.common import forge
@@ -24,7 +23,7 @@ class SuricataImporter:
         self.classification = forge.get_classification()
         self.log = logger
 
-    def _save_signatures(self, signatures: List[Rule], source, cur_file):
+    def _save_signatures(self, signatures: List[Rule], source, cur_file, default_classification=None):
         order = 1
         upload_list = []
         for signature in signatures:
@@ -32,7 +31,7 @@ class SuricataImporter:
             status = "DEPLOYED" if signature.enabled else "DISABLED"
 
             sig = Signature(dict(
-                classification=self.classification.UNRESTRICTED,
+                classification=default_classification or self.classification.UNRESTRICTED,
                 data=signature.raw,
                 name=signature.msg or name,
                 order=order,
@@ -47,15 +46,16 @@ class SuricataImporter:
             order += 1
 
         r = self.update_client.signature.add_update_many(source, 'suricata', upload_list, dedup_name=False)
-        self.log.info(f"Imported {r['success']}/{order - 1} signatures from {os.path.basename(cur_file)} into Assemblyline")
+        self.log.info(f"Imported {r['success']}/{order - 1} signatures"
+                      f" from {os.path.basename(cur_file)} into Assemblyline")
 
         return r['success']
 
-    def import_file(self, file_path: str, source: str):
+    def import_file(self, file_path: str, source: str, default_classification: str = None):
         self.log.info(f"Importing file: {file_path}")
         cur_file = os.path.expanduser(file_path)
         if os.path.exists(cur_file):
             signatures = parse_file(cur_file)
-            return self._save_signatures(signatures, source, cur_file)
+            return self._save_signatures(signatures, source, cur_file, default_classification=default_classification)
         else:
             raise Exception(f"File {cur_file} does not exists.")
