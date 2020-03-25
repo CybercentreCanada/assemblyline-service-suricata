@@ -15,7 +15,7 @@ from retrying import retry
 from assemblyline.common.str_utils import safe_str
 from assemblyline.common.digests import get_sha256_for_file
 from assemblyline_v4_service.common.base import ServiceBase
-from assemblyline_v4_service.common.result import Result, ResultSection
+from assemblyline_v4_service.common.result import Result, ResultSection, BODY_FORMAT
 
 SURICATA_BIN = "/usr/local/bin/suricata"
 FILE_UPDATE_DIRECTORY = os.environ.get('FILE_UPDATE_DIRECTORY', '/mount/updates/')
@@ -358,7 +358,7 @@ class Suricata(ServiceBase):
             domain_section = ResultSection("Domains", parent=root_section)
             for domain in domains:
                 domain_section.add_line(domain)
-                domain_section.add_tag('network.static.domain', domain)
+                domain_section.add_tag('network.dynamic.domain', domain)
         if ips:
             ip_section = ResultSection("IP Addresses", parent=root_section)
             for ip in ips:
@@ -369,15 +369,15 @@ class Suricata(ServiceBase):
                         or (ip.startswith("172.")
                             and 16 <= int(ip.split(".")[1]) <= 31)):
                     ip_section.add_line(ip)
-                    ip_section.add_tag('network.static.ip', ip)
+                    ip_section.add_tag('network.dynamic.ip', ip)
 
         if urls:
             url_section = ResultSection("URLs", parent=root_section)
             for url in urls:
                 url_section.add_line(url)
-                url_section.add_tag('network.static.uri', url)
+                url_section.add_tag('network.dynamic.uri', url)
         if email_addresses:
-            email_section = ResultSection("URLs", parent=root_section)
+            email_section = ResultSection("Email Addresses", parent=root_section)
             for eml in email_addresses:
                 email_section.add_line(eml)
                 email_section.add_tag('network.email.address', eml)
@@ -392,30 +392,44 @@ class Suricata(ServiceBase):
             "fingerprint": 'cert.thumbprint',
             "sni": 'network.static.domain'
         }
-        for tls_type, tls_values in tls_dict.items():
-            if tls_type in tls_mappings:
-                tag_type = tls_mappings[tls_type]
 
-                if tag_type is not None:
-                    for tls_value in tls_values:
-                        if tls_type == "fingerprint":
-                            # make sure the cert fingerprint/thumbprint matches other values,
-                            # like from PEFile
-                            tls_value = tls_value.replace(":", "").lower()
-                        root_section.add_tag(tag_type, tls_value)
+        if tls_dict:
+            tls_section = ResultSection("TLS Information", parent=root_section,
+                                        body_format=BODY_FORMAT.KEY_VALUE)
+            kv_body = {}
+            for tls_type, tls_values in tls_dict.items():
+                if tls_type == "fingerprint":
+                    # make sure the cert fingerprint/thumbprint matches other values,
+                    # like from PEFile
+                    tls_values = [v.replace(":", "").lower() for v in tls_values]
 
-            elif tls_type == "ja3":
-                for ja3_entry in tls_values:
-                    ja3_hash = ja3_entry.get("hash")
-                    ja3_string = ja3_entry.get("string")
-                    if ja3_hash:
-                        root_section.add_tag('network.tls.ja3_hash', ja3_hash)
-                    if ja3_string:
-                        root_section.add_tag('network.tls.ja3_string', ja3_string)
+                if tls_type in tls_mappings:
+                    kv_body[tls_type] = tls_values
 
-            else:
-                # stick a message in the logs about a new TLS type found in suricata logs
-                self.log.info(f"Found new TLS type {tls_type} with values {tls_values}")
+                    tag_type = tls_mappings[tls_type]
+                    if tag_type is not None:
+                        for tls_value in tls_values:
+                            tls_section.add_tag(tag_type, tls_value)
+
+                elif tls_type == "ja3":
+                    kv_body.setdefault('ja3_hash', [])
+                    kv_body.setdefault('ja3_string', [])
+
+                    for ja3_entry in tls_values:
+                        ja3_hash = ja3_entry.get("hash")
+                        ja3_string = ja3_entry.get("string")
+                        if ja3_hash:
+                            kv_body['ja3_hash'].append(ja3_hash)
+                            tls_section.add_tag('network.tls.ja3_hash', ja3_hash)
+                        if ja3_string:
+                            kv_body['ja3_string'].append(ja3_string)
+                            tls_section.add_tag('network.tls.ja3_string', ja3_string)
+
+                else:
+                    kv_body[tls_type] = tls_values
+                    # stick a message in the logs about a new TLS type found in suricata logs
+                    self.log.info(f"Found new TLS type {tls_type} with values {tls_values}")
+            tls_section.body = json.dumps(kv_body)
 
         # Create the result sections if there are any hits
         if len(alerts) > 0:
