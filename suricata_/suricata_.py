@@ -390,7 +390,7 @@ class Suricata(ServiceBase):
             "notbefore": 'cert.valid.start',
             "notafter": 'cert.valid.end',
             "fingerprint": 'cert.thumbprint',
-            "sni": 'network.dynamic.domain'
+            "sni": 'network.tls.sni'
         }
 
         if tls_dict:
