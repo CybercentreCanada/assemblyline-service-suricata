@@ -57,7 +57,7 @@ RUN apt-get update && apt-get install -y \
 # Install PIP dependancies
 USER assemblyline
 RUN touch /tmp/before-pip
-RUN pip install --user \
+RUN pip install --no-cache-dir --user \
   gitpython \
   simplejson \
   python-dateutil \
@@ -79,7 +79,7 @@ RUN ldconfig
 RUN make -C /tmp/suricata-${SURICATA_VERSION} install-full
 
 # Install suricata pip package
-RUN pip install --user /tmp/suricata-${SURICATA_VERSION}/python
+RUN pip install --no-cache-dir --user /tmp/suricata-${SURICATA_VERSION}/python
 
 # Install stripe
 COPY suricata_/stripe/* /tmp/stripe/
