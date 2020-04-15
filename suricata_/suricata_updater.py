@@ -214,7 +214,7 @@ def suricata_update() -> None:
     api_key = update_config['api_key']
     al_client = get_client(server, apikey=(user, api_key), verify=False)
 
-    suricata_importer = SuricataImporter(al_client)
+    suricata_importer = SuricataImporter(al_client, logger=LOGGER)
 
     for source, source_val in files_sha256.items():
         total_imported = 0
