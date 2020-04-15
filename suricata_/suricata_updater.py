@@ -20,10 +20,10 @@ from assemblyline.common.digests import get_sha256_for_file
 from assemblyline.common.isotime import iso_to_epoch
 from suricata_.suricata_importer import SuricataImporter
 
-al_log.init_logging('service_updater')
+al_log.init_logging('updater.suricata')
 classification = forge.get_classification()
 
-LOGGER = logging.getLogger('assemblyline.service_updater')
+LOGGER = logging.getLogger('assemblyline.updater.suricata')
 
 UPDATE_CONFIGURATION_PATH = os.environ.get('UPDATE_CONFIGURATION_PATH', "/tmp/suricata_updater_config.yaml")
 UPDATE_OUTPUT_PATH = os.environ.get('UPDATE_OUTPUT_PATH', "/tmp/suricata_updater_output")
