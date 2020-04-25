@@ -1,6 +1,6 @@
 name: Suricata
 version: 1
-description: This service scans network files.
+description: This service scans network capture files with signature and extract files from network capture.
 
 accepts: network/.*
 rejects: empty|metadata/.*
