@@ -162,85 +162,89 @@ def suricata_update() -> None:
     """
     Using an update configuration file as an input, which contains a list of sources, download all the file(s).
     """
-    # Load updater configuration
-    update_config = {}
-    if UPDATE_CONFIGURATION_PATH and os.path.exists(UPDATE_CONFIGURATION_PATH):
-        with open(UPDATE_CONFIGURATION_PATH, 'r') as yml_fh:
-            update_config = yaml.safe_load(yml_fh)
-    else:
-        LOGGER.error(f"Update configuration file doesn't exist: {UPDATE_CONFIGURATION_PATH}")
-        exit()
-
-    # Exit if no update sources given
-    if 'sources' not in update_config.keys() or not update_config['sources']:
-        exit()
-
-    # Parse updater configuration
-    previous_update = update_config.get('previous_update', None)
-    previous_hash = update_config.get('previous_hash', None) or {}
-    if previous_hash:
-        previous_hash = json.loads(previous_hash)
-    sources = {source['name']: source for source in update_config['sources']}
-    files_sha256 = {}
-    source_default_classification = {}
-
-    # Go through each source and download file
-    for source_name, source in sources.items():
-        uri: str = source['uri']
-        source_default_classification[source_name] = source.get('default_classification', classification.UNRESTRICTED)
-
-        if uri.endswith('.git'):
-            files = git_clone_repo(source, previous_update=previous_update)
-            for file, sha256 in files:
-                files_sha256.setdefault(source_name, {})
-                if previous_hash.get(source_name, {}).get(file, None) != sha256:
-                    files_sha256[source_name][file] = sha256
+    # noinspection PyBroadException
+    try:
+        # Load updater configuration
+        update_config = {}
+        if UPDATE_CONFIGURATION_PATH and os.path.exists(UPDATE_CONFIGURATION_PATH):
+            with open(UPDATE_CONFIGURATION_PATH, 'r') as yml_fh:
+                update_config = yaml.safe_load(yml_fh)
         else:
-            files = url_download(source, previous_update=previous_update)
-            for file, sha256 in files:
-                files_sha256.setdefault(source_name, {})
-                if previous_hash.get(source_name, {}).get(file, None) != sha256:
-                    files_sha256[source_name][file] = sha256
+            LOGGER.error(f"Update configuration file doesn't exist: {UPDATE_CONFIGURATION_PATH}")
+            exit()
 
-    if not files_sha256:
-        LOGGER.info('No Suricata rule file(s) downloaded')
-        shutil.rmtree(UPDATE_OUTPUT_PATH, ignore_errors=True)
-        exit()
+        # Exit if no update sources given
+        if 'sources' not in update_config.keys() or not update_config['sources']:
+            exit()
 
-    LOGGER.info("Suricata rule(s) file(s) successfully downloaded")
+        # Parse updater configuration
+        previous_update = update_config.get('previous_update', None)
+        previous_hash = update_config.get('previous_hash', None) or {}
+        if previous_hash:
+            previous_hash = json.loads(previous_hash)
+        sources = {source['name']: source for source in update_config['sources']}
+        files_sha256 = {}
+        source_default_classification = {}
 
-    server = update_config['ui_server']
-    user = update_config['api_user']
-    api_key = update_config['api_key']
-    al_client = get_client(server, apikey=(user, api_key), verify=False)
+        # Go through each source and download file
+        for source_name, source in sources.items():
+            uri: str = source['uri']
+            source_default_classification[source_name] = source.get('default_classification', classification.UNRESTRICTED)
 
-    suricata_importer = SuricataImporter(al_client, logger=LOGGER)
+            if uri.endswith('.git'):
+                files = git_clone_repo(source, previous_update=previous_update)
+                for file, sha256 in files:
+                    files_sha256.setdefault(source_name, {})
+                    if previous_hash.get(source_name, {}).get(file, None) != sha256:
+                        files_sha256[source_name][file] = sha256
+            else:
+                files = url_download(source, previous_update=previous_update)
+                for file, sha256 in files:
+                    files_sha256.setdefault(source_name, {})
+                    if previous_hash.get(source_name, {}).get(file, None) != sha256:
+                        files_sha256[source_name][file] = sha256
 
-    for source, source_val in files_sha256.items():
-        total_imported = 0
-        default_classification = source_default_classification[source]
-        for file in source_val.keys():
-            total_imported += suricata_importer.import_file(file, source, default_classification=default_classification)
-        LOGGER.info(f"{total_imported} signatures were imported for source {source}")
+        if not files_sha256:
+            LOGGER.info('No Suricata rule file(s) downloaded')
+            shutil.rmtree(UPDATE_OUTPUT_PATH, ignore_errors=True)
+            exit()
 
-    if al_client.signature.update_available(since=previous_update or '', sig_type='suricata')['update_available']:
-        LOGGER.info("AN UPDATE IS AVAILABLE TO DOWNLOAD")
+        LOGGER.info("Suricata rule(s) file(s) successfully downloaded")
 
-        if not os.path.exists(UPDATE_OUTPUT_PATH):
-            os.makedirs(UPDATE_OUTPUT_PATH)
+        server = update_config['ui_server']
+        user = update_config['api_user']
+        api_key = update_config['api_key']
+        al_client = get_client(server, apikey=(user, api_key), verify=False)
 
-        temp_zip_file = os.path.join(UPDATE_OUTPUT_PATH, 'temp.zip')
-        al_client.signature.download(output=temp_zip_file, query="type:suricata AND (status:NOISY OR status:DEPLOYED)")
+        suricata_importer = SuricataImporter(al_client, logger=LOGGER)
 
-        if os.path.exists(temp_zip_file):
-            with ZipFile(temp_zip_file, 'r') as zip_f:
-                zip_f.extractall(UPDATE_OUTPUT_PATH)
+        for source, source_val in files_sha256.items():
+            total_imported = 0
+            default_classification = source_default_classification[source]
+            for file in source_val.keys():
+                total_imported += suricata_importer.import_file(file, source, default_classification=default_classification)
+            LOGGER.info(f"{total_imported} signatures were imported for source {source}")
 
-            os.remove(temp_zip_file)
+        if al_client.signature.update_available(since=previous_update or '', sig_type='suricata')['update_available']:
+            LOGGER.info("AN UPDATE IS AVAILABLE TO DOWNLOAD")
 
-    # Create the response yaml
-    with open(os.path.join(UPDATE_OUTPUT_PATH, 'response.yaml'), 'w') as yml_fh:
-        yaml.safe_dump(dict(hash=json.dumps(files_sha256)), yml_fh)
+            if not os.path.exists(UPDATE_OUTPUT_PATH):
+                os.makedirs(UPDATE_OUTPUT_PATH)
+
+            temp_zip_file = os.path.join(UPDATE_OUTPUT_PATH, 'temp.zip')
+            al_client.signature.download(output=temp_zip_file, query="type:suricata AND (status:NOISY OR status:DEPLOYED)")
+
+            if os.path.exists(temp_zip_file):
+                with ZipFile(temp_zip_file, 'r') as zip_f:
+                    zip_f.extractall(UPDATE_OUTPUT_PATH)
+
+                os.remove(temp_zip_file)
+
+        # Create the response yaml
+        with open(os.path.join(UPDATE_OUTPUT_PATH, 'response.yaml'), 'w') as yml_fh:
+            yaml.safe_dump(dict(hash=json.dumps(files_sha256)), yml_fh)
+    except Exception:
+        LOGGER.exception("Updater ended with an exception!")
 
 
 if __name__ == '__main__':
