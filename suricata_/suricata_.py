@@ -198,6 +198,7 @@ class Suricata(ServiceBase):
     def execute(self, request):
         file_path = request.file_path
         result = Result()
+        extracted = set()
 
         # Report the version of suricata as the service context
         request.set_service_context(f"Suricata version: {self.get_tool_version()}")
@@ -334,23 +335,26 @@ class Suricata(ServiceBase):
 
             # Check to see if any files were extracted
             if request.get_param("extract_files") and record["event_type"] == "fileinfo":
-                filename = os.path.basename(record["fileinfo"]["filename"])
+                sha256 = f"{record['fileinfo']['sha256'][:12]}.data"
+                filename = os.path.basename(record["fileinfo"]["filename"]) or sha256
                 extracted_file_path = os.path.join(self.working_directory,
                                                    'filestore',
                                                    record["fileinfo"]["sha256"][:2].lower(),
                                                    record["fileinfo"]["sha256"])
 
-                self.log.info(f"extracted file {filename}")
+                if sha256 not in extracted:
+                    self.log.info(f"extracted file {filename}")
+                    extracted.add(sha256)
+                    request.add_extracted(extracted_file_path, filename, "Extracted by suricata")
 
-                request.add_extracted(extracted_file_path, filename, "Extracted by suricata")
+                    # Report a null score to indicate that files were extracted. If no sigs hit, it's not clear
+                    # where the extracted files came from
+                    if file_extracted_section is None:
+                        file_extracted_section = ResultSection("File(s) extracted by suricata", parent=result)
 
-                # Report a null score to indicate that files were extracted. If no sigs hit, it's not clear
-                # where the extracted files came from
-                if file_extracted_section is None:
-                    file_extracted_section = ResultSection("File(s) extracted by suricata", parent=result)
-
-                file_extracted_section.add_line(filename)
-                file_extracted_section.add_tag('file.name.extracted', filename)
+                    file_extracted_section.add_line(filename)
+                    if filename != sha256:
+                        file_extracted_section.add_tag('file.name.extracted', filename)
 
         # Add tags for the domains, urls, and IPs we've discovered
         root_section = ResultSection("Discovered IOCs", parent=result)
