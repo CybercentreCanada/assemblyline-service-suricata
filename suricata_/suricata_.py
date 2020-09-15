@@ -180,6 +180,7 @@ class Suricata(ServiceBase):
         if not os.path.exists(self.suricata_socket):
             command = [
                 SURICATA_BIN,
+                "-vvvv",  # Useful for debugging
                 "-c", self.suricata_yaml,
                 f"--unix-socket={self.suricata_socket}",
                 "--pidfile", f"{self.run_dir}/suricata.pid",
