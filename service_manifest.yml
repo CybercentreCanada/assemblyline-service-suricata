@@ -49,7 +49,7 @@ heuristics:
 docker_config:
   image: ${REGISTRY}cccs/assemblyline-service-suricata:$SERVICE_TAG
   cpu_cores: 1
-  ram_mb: 1024
+  ram_mb: 2048
 
 update_config:
   generates_signatures: true
