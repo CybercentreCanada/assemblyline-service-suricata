@@ -138,7 +138,7 @@ def git_clone_repo(source: Dict[str, Any], previous_update=None) -> List:
     url = source['uri']
     pattern = source.get('pattern', None)
     key = source.get('private_key', None)
-    ssl_ignore = source.get("ssl_ignore_errors")
+    ssl_ignore = source.get("ssl_ignore_errors", False)
     ca_cert = source.get("ca_cert")
 
     git_env = {}
