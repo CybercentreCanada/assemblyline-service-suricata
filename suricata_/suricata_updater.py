@@ -10,6 +10,7 @@ from typing import List, Dict, Any
 from urllib.parse import urlparse
 from zipfile import ZipFile
 
+import certifi
 import requests
 import yaml
 from assemblyline_client import get_client
@@ -30,6 +31,13 @@ UPDATE_OUTPUT_PATH = os.environ.get('UPDATE_OUTPUT_PATH', "/tmp/suricata_updater
 UPDATE_DIR = os.path.join(tempfile.gettempdir(), 'suricata_updates')
 
 
+def add_cacert(cert: str):
+    # Add certificate to requests
+    cafile = certifi.where()
+    with open(cafile, 'a') as ca_editor:
+        ca_editor.write(f"\n{cert}")
+
+
 def url_download(source: Dict[str, Any], previous_update=None) -> List:
     """
 
@@ -42,12 +50,20 @@ def url_download(source: Dict[str, Any], previous_update=None) -> List:
     pattern = source.get('pattern', None)
     username = source.get('username', None)
     password = source.get('password', None)
+    ca_cert = source.get('ca_cert', None)
+    ignore_ssl_errors = source.get('ssl_ignore_errors', False)
     auth = (username, password) if username and password else None
 
     headers = source.get('headers', None)
 
+    LOGGER.info(f"{name} source is configured to {'ignore SSL errors' if ignore_ssl_errors else 'verify SSL'}.")
+    if ca_cert:
+        LOGGER.info(f"A CA certificate has been provided with this source.")
+        add_cacert(ca_cert)
+
     # Create a requests session
     session = requests.Session()
+    session.verify = not ignore_ssl_errors
 
     try:
         if isinstance(previous_update, str):
@@ -122,6 +138,17 @@ def git_clone_repo(source: Dict[str, Any], previous_update=None) -> List:
     url = source['uri']
     pattern = source.get('pattern', None)
     key = source.get('private_key', None)
+    ssl_ignore = source.get("ssl_ignore_errors", False)
+    ca_cert = source.get("ca_cert")
+
+    git_env = {}
+    if ssl_ignore:
+        git_env['GIT_SSL_NO_VERIFY'] = 1
+
+    if ca_cert:
+        LOGGER.info(f"A CA certificate has been provided with this source.")
+        add_cacert(ca_cert)
+        git_env['GIT_SSL_CAINFO'] = certifi.where()
 
     clone_dir = os.path.join(UPDATE_DIR, name)
     if os.path.exists(clone_dir):
@@ -136,9 +163,9 @@ def git_clone_repo(source: Dict[str, Any], previous_update=None) -> List:
         os.chmod(git_ssh_identity_file, 0o0400)
 
         git_ssh_cmd = f"ssh -oStrictHostKeyChecking=no -i {git_ssh_identity_file}"
-        repo = Repo.clone_from(url, clone_dir, env={"GIT_SSH_COMMAND": git_ssh_cmd})
-    else:
-        repo = Repo.clone_from(url, clone_dir)
+        git_env['GIT_SSH_COMMAND'] = git_ssh_cmd
+
+    repo = Repo.clone_from(url, clone_dir, env=git_env)
 
     # Check repo last commit
     if previous_update:
