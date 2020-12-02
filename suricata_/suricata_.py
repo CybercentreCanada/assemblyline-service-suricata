@@ -69,8 +69,10 @@ class Suricata(ServiceBase):
         if ret:
             for ruleset in ret.get('message'):
                 self.log.info(f"Ruleset {ruleset['id']}: {ruleset['rules_loaded']} rules loaded")
-                if ruleset['rules_failed']:
+                if ruleset['rules_failed'] and ruleset['rules_loaded'] == 0:
                     self.log.error(f"Ruleset {ruleset['id']}: {ruleset['rules_failed']} rules failed to load")
+                else:
+                    self.log.warning(f"Ruleset {ruleset['id']}: {ruleset['rules_failed']} rules failed to load")
 
         self.log.info(f"Suricata started with service version: {self.get_service_version()}")
 
