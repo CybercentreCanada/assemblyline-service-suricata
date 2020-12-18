@@ -54,6 +54,7 @@ def url_download(source: Dict[str, Any], previous_update=None) -> List:
     ignore_ssl_errors = source.get('ssl_ignore_errors', False)
     auth = (username, password) if username and password else None
 
+    proxy = source.get('proxy', None)
     headers = source.get('headers', None)
 
     LOGGER.info(f"{name} source is configured to {'ignore SSL errors' if ignore_ssl_errors else 'verify SSL'}.")
@@ -64,6 +65,10 @@ def url_download(source: Dict[str, Any], previous_update=None) -> List:
     # Create a requests session
     session = requests.Session()
     session.verify = not ignore_ssl_errors
+
+    proxies = None
+    if proxy:
+        proxies = {'https': proxy} if "https" in proxy else {'http': proxy}
 
     try:
         if isinstance(previous_update, str):
@@ -88,7 +93,7 @@ def url_download(source: Dict[str, Any], previous_update=None) -> List:
             else:
                 headers = {'If-Modified-Since': previous_update}
 
-        response = session.get(uri, auth=auth, headers=headers)
+        response = session.get(uri, auth=auth, headers=headers, proxies=proxies)
 
         # Check the response code
         if response.status_code == requests.codes['not_modified']:
@@ -138,21 +143,24 @@ def git_clone_repo(source: Dict[str, Any], previous_update=None) -> List:
     url = source['uri']
     pattern = source.get('pattern', None)
     key = source.get('private_key', None)
-    ssl_ignore = source.get("ssl_ignore_errors", False)
-    ca_cert = source.get("ca_cert")
 
+    ignore_ssl_errors = source.get("ssl_ignore_errors", False)
+    ca_cert = source.get("ca_cert")
+    proxy = source.get('proxy', None)
+
+    git_config = None
     git_env = {}
-    if ssl_ignore:
+
+    if ignore_ssl_errors:
         git_env['GIT_SSL_NO_VERIFY'] = 1
+
+    if proxy:
+        git_config = f"https.proxy='{proxy}'" if 'https' in proxy else f"http.proxy='{proxy}'"
 
     if ca_cert:
         LOGGER.info(f"A CA certificate has been provided with this source.")
         add_cacert(ca_cert)
         git_env['GIT_SSL_CAINFO'] = certifi.where()
-
-    clone_dir = os.path.join(UPDATE_DIR, name)
-    if os.path.exists(clone_dir):
-        shutil.rmtree(clone_dir)
 
     if key:
         LOGGER.info(f"key found for {url}")
@@ -165,7 +173,11 @@ def git_clone_repo(source: Dict[str, Any], previous_update=None) -> List:
         git_ssh_cmd = f"ssh -oStrictHostKeyChecking=no -i {git_ssh_identity_file}"
         git_env['GIT_SSH_COMMAND'] = git_ssh_cmd
 
-    repo = Repo.clone_from(url, clone_dir, env=git_env)
+    clone_dir = os.path.join(UPDATE_DIR, name)
+    if os.path.exists(clone_dir):
+        shutil.rmtree(clone_dir)
+
+    repo = Repo.clone_from(url, clone_dir, env=git_env, git_config=git_config)
 
     # Check repo last commit
     if previous_update:
