@@ -66,6 +66,7 @@ def url_download(source: Dict[str, Any], previous_update=None) -> List:
     session = requests.Session()
     session.verify = not ignore_ssl_errors
 
+    #Let https requests go through proxy
     if proxy:
         os.environ['https_proxy'] = proxy
 
@@ -122,6 +123,10 @@ def url_download(source: Dict[str, Any], previous_update=None) -> List:
                         else:
                             rules_files.add(filepath)
 
+            # Clear proxy setting
+            if proxy:
+                del os.environ['https_proxy']
+
             return [(f, get_sha256_for_file(f)) for f in rules_files or [file_path]]
 
     except requests.Timeout:
@@ -153,6 +158,7 @@ def git_clone_repo(source: Dict[str, Any], previous_update=None) -> List:
     if ignore_ssl_errors:
         git_env['GIT_SSL_NO_VERIFY'] = 1
 
+    #Let https requests go through proxy
     if proxy:
         os.environ['https_proxy'] = proxy
 
@@ -192,6 +198,10 @@ def git_clone_repo(source: Dict[str, Any], previous_update=None) -> List:
                  for f in os.listdir(clone_dir) if re.match(pattern, f)]
     else:
         files = [(f, get_sha256_for_file(f)) for f in glob.glob(os.path.join(clone_dir, '*.rules*'))]
+
+    #Clear proxy setting
+    if proxy:
+        del os.environ['https_proxy']
 
     return files
 
