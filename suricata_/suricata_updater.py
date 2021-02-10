@@ -66,6 +66,9 @@ def url_download(source: Dict[str, Any], previous_update=None) -> List:
     session = requests.Session()
     session.verify = not ignore_ssl_errors
 
+    if proxy:
+        os.environ['https_proxy'] = proxy
+
     try:
         if isinstance(previous_update, str):
             previous_update = iso_to_epoch(previous_update)
@@ -89,14 +92,7 @@ def url_download(source: Dict[str, Any], previous_update=None) -> List:
             else:
                 headers = {'If-Modified-Since': previous_update}
 
-        response = None
-        if proxy:
-            try:
-                response = session.get(uri, auth=auth, headers=headers, proxies={'https': proxy}, timeout=30)
-            except ConnectionRefusedError:
-                response = session.get(uri, auth=auth, headers=headers, proxies={'http': proxy}, timeout=30)
-        else:
-            response = session.get(uri, auth=auth, headers=headers)
+        response = session.get(uri, auth=auth, headers=headers)
 
         # Check the response code
         if response.status_code == requests.codes['not_modified']:
@@ -158,7 +154,7 @@ def git_clone_repo(source: Dict[str, Any], previous_update=None) -> List:
         git_env['GIT_SSL_NO_VERIFY'] = 1
 
     if proxy:
-        git_config = f"https.proxy='{proxy}'" if 'https' in proxy else f"http.proxy='{proxy}'"
+        os.environ['https_proxy'] = proxy
 
     if ca_cert:
         LOGGER.info(f"A CA certificate has been provided with this source.")
