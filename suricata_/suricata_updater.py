@@ -66,9 +66,9 @@ def url_download(source: Dict[str, Any], previous_update=None) -> List:
     session = requests.Session()
     session.verify = not ignore_ssl_errors
 
-    proxies = None
+    #Let https requests go through proxy
     if proxy:
-        proxies = {'https': proxy} if "https" in proxy else {'http': proxy}
+        os.environ['https_proxy'] = proxy
 
     try:
         if isinstance(previous_update, str):
@@ -93,7 +93,7 @@ def url_download(source: Dict[str, Any], previous_update=None) -> List:
             else:
                 headers = {'If-Modified-Since': previous_update}
 
-        response = session.get(uri, auth=auth, headers=headers, proxies=proxies)
+        response = session.get(uri, auth=auth, headers=headers)
 
         # Check the response code
         if response.status_code == requests.codes['not_modified']:
@@ -122,6 +122,10 @@ def url_download(source: Dict[str, Any], previous_update=None) -> List:
                                 rules_files.add(filepath)
                         else:
                             rules_files.add(filepath)
+
+            # Clear proxy setting
+            if proxy:
+                del os.environ['https_proxy']
 
             return [(f, get_sha256_for_file(f)) for f in rules_files or [file_path]]
 
@@ -154,8 +158,9 @@ def git_clone_repo(source: Dict[str, Any], previous_update=None) -> List:
     if ignore_ssl_errors:
         git_env['GIT_SSL_NO_VERIFY'] = 1
 
+    #Let https requests go through proxy
     if proxy:
-        git_config = f"https.proxy='{proxy}'" if 'https' in proxy else f"http.proxy='{proxy}'"
+        os.environ['https_proxy'] = proxy
 
     if ca_cert:
         LOGGER.info(f"A CA certificate has been provided with this source.")
@@ -193,6 +198,10 @@ def git_clone_repo(source: Dict[str, Any], previous_update=None) -> List:
                  for f in os.listdir(clone_dir) if re.match(pattern, f)]
     else:
         files = [(f, get_sha256_for_file(f)) for f in glob.glob(os.path.join(clone_dir, '*.rules*'))]
+
+    #Clear proxy setting
+    if proxy:
+        del os.environ['https_proxy']
 
     return files
 
