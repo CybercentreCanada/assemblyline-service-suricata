@@ -66,10 +66,6 @@ def url_download(source: Dict[str, Any], previous_update=None) -> List:
     session = requests.Session()
     session.verify = not ignore_ssl_errors
 
-    proxies = None
-    if proxy:
-        proxies = {'https': proxy} if "https" in proxy else {'http': proxy}
-
     try:
         if isinstance(previous_update, str):
             previous_update = iso_to_epoch(previous_update)
@@ -93,7 +89,14 @@ def url_download(source: Dict[str, Any], previous_update=None) -> List:
             else:
                 headers = {'If-Modified-Since': previous_update}
 
-        response = session.get(uri, auth=auth, headers=headers, proxies=proxies)
+        response = None
+        if proxy:
+            try:
+                response = session.get(uri, auth=auth, headers=headers, proxies={'https': proxy}, timeout=30)
+            except ConnectionRefusedError:
+                response = session.get(uri, auth=auth, headers=headers, proxies={'http': proxy}, timeout=30)
+        else:
+            response = session.get(uri, auth=auth, headers=headers)
 
         # Check the response code
         if response.status_code == requests.codes['not_modified']:
