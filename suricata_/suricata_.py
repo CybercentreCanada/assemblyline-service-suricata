@@ -12,6 +12,7 @@ from io import StringIO
 from pathlib import Path
 from retrying import retry
 
+from assemblyline.common.exceptions import RecoverableError
 from assemblyline.common.str_utils import safe_str
 from assemblyline.common.digests import get_sha256_for_file
 from assemblyline_v4_service.common.base import ServiceBase
@@ -350,7 +351,11 @@ class Suricata(ServiceBase):
                 if sha256 not in extracted:
                     self.log.info(f"extracted file {filename}")
                     extracted.add(sha256)
-                    request.add_extracted(extracted_file_path, filename, "Extracted by suricata")
+                    try:
+                        request.add_extracted(extracted_file_path, filename, "Extracted by suricata")
+                    except FileNotFoundError as e:
+                        # An intermittent issue, just try again
+                        raise RecoverableError(e)
 
                     # Report a null score to indicate that files were extracted. If no sigs hit, it's not clear
                     # where the extracted files came from
