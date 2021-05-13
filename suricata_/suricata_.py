@@ -26,7 +26,7 @@ class Suricata(ServiceBase):
         super(Suricata, self).__init__(config)
 
         self.home_net = self.config.get("home_net", "any")
-        self.rules_config = yaml.safe_dump({"rule_files": []})
+        self.rules_config = yaml.safe_dump({"rule-files": []})
         self.rules_list = []
         self.run_dir = "/var/run/suricata"
         self.suricata_socket = None
@@ -165,6 +165,8 @@ class Suricata(ServiceBase):
         try:
             self.suricata_sc.connect()
         except suricatasc.SuricataException as e:
+            if "Transport endpoint is already connected" in str(e):
+                return True
             self.log.info(f"Suricata not started yet: {str(e)}")
             return False
         return True
