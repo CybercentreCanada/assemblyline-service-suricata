@@ -12,6 +12,7 @@ from io import StringIO
 from pathlib import Path
 from retrying import retry
 
+from assemblyline.common.exceptions import RecoverableError
 from assemblyline.common.str_utils import safe_str
 from assemblyline.common.digests import get_sha256_for_file
 from assemblyline_v4_service.common.base import ServiceBase
@@ -26,7 +27,7 @@ class Suricata(ServiceBase):
         super(Suricata, self).__init__(config)
 
         self.home_net = self.config.get("home_net", "any")
-        self.rules_config = yaml.safe_dump({"rule_files": []})
+        self.rules_config = yaml.safe_dump({"rule-files": []})
         self.rules_list = []
         self.run_dir = "/var/run/suricata"
         self.suricata_socket = None
@@ -165,6 +166,8 @@ class Suricata(ServiceBase):
         try:
             self.suricata_sc.connect()
         except suricatasc.SuricataException as e:
+            if "Transport endpoint is already connected" in str(e):
+                return True
             self.log.info(f"Suricata not started yet: {str(e)}")
             return False
         return True
@@ -348,7 +351,11 @@ class Suricata(ServiceBase):
                 if sha256 not in extracted:
                     self.log.info(f"extracted file {filename}")
                     extracted.add(sha256)
-                    request.add_extracted(extracted_file_path, filename, "Extracted by suricata")
+                    try:
+                        request.add_extracted(extracted_file_path, filename, "Extracted by suricata")
+                    except FileNotFoundError as e:
+                        # An intermittent issue, just try again
+                        raise RecoverableError(e)
 
                     # Report a null score to indicate that files were extracted. If no sigs hit, it's not clear
                     # where the extracted files came from

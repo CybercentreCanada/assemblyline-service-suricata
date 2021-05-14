@@ -1,7 +1,7 @@
 FROM cccs/assemblyline-v4-service-base:latest AS base
 
 ENV SERVICE_PATH suricata_.suricata_.Suricata
-ENV SURICATA_VERSION 4.1.2
+ENV SURICATA_VERSION 6.0.2
 
 USER root
 
@@ -9,50 +9,15 @@ RUN echo 'deb http://deb.debian.org/debian stretch-backports main' >> /etc/apt/s
 
 # Install APT dependancies
 RUN apt-get update && apt-get install -y \
-  git \
-  libpcre3 \
-  libpcap0.8 \
-  libnet1 \
-  libyaml-0-2 \
-  zlib1g \
-  libcap-ng0 \
-  libhtp2 \
-  libjansson4 \
-  liblua5.1-0 \
-  libnss3 \
-  liblz4-1 \
-   && rm -rf /var/lib/apt/lists/*
+  git wget curl \
+  libpcre3 libpcre3-dbg libpcre3-dev build-essential libpcap-dev   \
+  libnet1-dev libyaml-0-2 libyaml-dev pkg-config zlib1g zlib1g-dev \
+  libcap-ng-dev libcap-ng0 make libmagic-dev libjansson-dev\
+  libnss3-dev libgeoip-dev liblua5.1-dev libhiredis-dev libevent-dev \
+  python-yaml rustc cargo autoconf \
+  && rm -rf /var/lib/apt/lists/*
 
 FROM base AS build
-
-# Install APT dependancies
-RUN apt-get update && apt-get install -y \
-  git \
-  libpcre3 \
-  libpcre3-dbg \
-  libpcre3-dev \
-  build-essential \
-  autoconf \
-  automake \
-  libtool \
-  libpcap-dev \
-  libnet1-dev \
-  libyaml-0-2 \
-  libyaml-dev \
-  zlib1g \
-  zlib1g-dev \
-  libcap-ng-dev \
-  libcap-ng0 \
-  make \
-  libmagic-dev \
-  libjansson-dev \
-  libjansson4 \
-  pkg-config \
-  cargo \
-  liblua5.1-0-dev \
-  libnss3-dev \
-  liblz4-dev \
-  wget && rm -rf /var/lib/apt/lists/*
 
 # Install PIP dependancies
 USER assemblyline
@@ -67,18 +32,26 @@ RUN pip install --no-cache-dir --user \
 USER root
 RUN ln -s /var/lib/assemblyline/.local /root/.local
 
+# Install rustup (purge rustc)
+RUN apt remove --purge -y rustc
+RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
+SHELL ["bash", "-lc"]
+RUN source $HOME/.cargo/env
+
 # Build suricata
 RUN wget -O /tmp/suricata-${SURICATA_VERSION}.tar.gz https://www.openinfosecfoundation.org/download/suricata-${SURICATA_VERSION}.tar.gz
 RUN tar -xvzf /tmp/suricata-${SURICATA_VERSION}.tar.gz -C /tmp
 WORKDIR /tmp/suricata-${SURICATA_VERSION}
 RUN ./configure --disable-gccmarch-native --prefix=/build/ --sysconfdir=/etc/ --localstatedir=/var/ \
-                --enable-python --enable-rust --enable-lua
+  --enable-python --enable-rust --enable-lua
 RUN make -C /tmp/suricata-${SURICATA_VERSION}
 RUN make -C /tmp/suricata-${SURICATA_VERSION} install
-RUN ldconfig
 RUN make -C /tmp/suricata-${SURICATA_VERSION} install-full
+RUN ldconfig /usr/local/lib
 
 # Install suricata pip package
+ENV PATH="/build/bin:$PATH"
+ENV TMPDIR=/tmp/suricata-${SURICATA_VERSION}
 RUN pip install --no-cache-dir --user /tmp/suricata-${SURICATA_VERSION}/python
 
 # Install stripe
@@ -99,7 +72,9 @@ COPY --chown=assemblyline:assemblyline --from=build /var/lib/assemblyline/.local
 COPY --from=build /build/ /usr/local/
 COPY --from=build /etc/suricata/ /etc/suricata/
 COPY --from=build /var/log/suricata/ /var/log/suricata/
+COPY --from=build /usr/lib /usr/lib
 
+ENV LD_LIBRARY_PATH=/usr/local/lib
 # Create all suricata directories and set permissions
 RUN mkdir -p /mount/updates && chown -R assemblyline /mount/updates
 RUN mkdir -p /etc/suricata && chown -R assemblyline /etc/suricata
@@ -111,7 +86,7 @@ RUN mkdir -p /var/run/suricata && chown -R assemblyline /var/run/suricata
 COPY suricata_/conf/suricata.yaml /etc/suricata/
 RUN chown assemblyline /etc/suricata/suricata.yaml
 RUN sed -i -e 's/__HOME_NET__/any/g' /etc/suricata/suricata.yaml
-RUN sed -i -e 's/__RULE_FILES__/rule_files: []/g' /etc/suricata/suricata.yaml
+RUN sed -i -e 's/__RULE_FILES__/rule-files: []/g' /etc/suricata/suricata.yaml
 
 # Update local rules using suricata-update script here
 RUN touch /etc/suricata/suricata-rules-update
