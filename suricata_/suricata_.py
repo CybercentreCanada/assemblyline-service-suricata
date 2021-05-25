@@ -17,6 +17,7 @@ from assemblyline.common.str_utils import safe_str
 from assemblyline.common.digests import get_sha256_for_file
 from assemblyline_v4_service.common.base import ServiceBase
 from assemblyline_v4_service.common.result import Result, ResultSection, BODY_FORMAT
+from assemblyline_v4_service.common.request import MaxExtractedExceeded
 
 SURICATA_BIN = "/usr/local/bin/suricata"
 FILE_UPDATE_DIRECTORY = os.environ.get('FILE_UPDATE_DIRECTORY', '/mount/updates/')
@@ -73,7 +74,8 @@ class Suricata(ServiceBase):
                 if ruleset['rules_failed'] and ruleset['rules_loaded'] == 0:
                     self.log.error(f"Ruleset {ruleset['id']}: {ruleset['rules_failed']} rules failed to load")
                 else:
-                    self.log.warning(f"Ruleset {ruleset['id']}: {ruleset['rules_failed']} rules failed to load")
+                    self.log.warning(f"Ruleset {ruleset['id']}: {ruleset['rules_failed']} rules failed to load."
+                                     "This can be due to duplication of rules among muliple rulesets being loaded.")
 
         self.log.info(f"Suricata started with service version: {self.get_service_version()}")
 
@@ -356,6 +358,9 @@ class Suricata(ServiceBase):
                     except FileNotFoundError as e:
                         # An intermittent issue, just try again
                         raise RecoverableError(e)
+                    except MaxExtractedExceeded:
+                        # We've hit our limit
+                        pass
 
                     # Report a null score to indicate that files were extracted. If no sigs hit, it's not clear
                     # where the extracted files came from
