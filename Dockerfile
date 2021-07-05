@@ -1,7 +1,7 @@
 FROM cccs/assemblyline-v4-service-base:latest AS base
 
 ENV SERVICE_PATH suricata_.suricata_.Suricata
-ENV SURICATA_VERSION 6.0.2
+ENV SURICATA_VERSION 6.0.3
 
 USER root
 
