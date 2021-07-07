@@ -12,12 +12,12 @@ from io import StringIO
 from pathlib import Path
 from retrying import retry
 
+from assemblyline.common.digests import get_sha256_for_file
 from assemblyline.common.exceptions import RecoverableError
 from assemblyline.common.str_utils import safe_str
-from assemblyline.common.digests import get_sha256_for_file
 from assemblyline_v4_service.common.base import ServiceBase
-from assemblyline_v4_service.common.result import Result, ResultSection, BODY_FORMAT
 from assemblyline_v4_service.common.request import MaxExtractedExceeded
+from assemblyline_v4_service.common.result import BODY_FORMAT, Result, ResultSection
 
 SURICATA_BIN = "/usr/local/bin/suricata"
 FILE_UPDATE_DIRECTORY = os.environ.get('FILE_UPDATE_DIRECTORY', '/mount/updates/')
@@ -243,10 +243,12 @@ class Suricata(ServiceBase):
         # Wait for the socket finish processing our PCAP
         while True:
             time.sleep(1)
-            ret = self.suricata_sc.send_command("pcap-current")
-
-            if ret and ret["message"] == "None":
-                break
+            try:
+                ret = self.suricata_sc.send_command("pcap-current")
+                if ret and ret["message"] == "None":
+                    break
+            except ConnectionResetError as e:
+                raise RecoverableError(e)
 
         # Bring back stdout and stderr
         sys.stdout = old_stdout
