@@ -309,7 +309,10 @@ class Suricata(ServiceBase):
                 if signature_id not in alerts:
                     alerts[signature_id] = []
                 if signature_id not in signatures:
-                    signatures[signature_id] = signature
+                    signatures[signature_id] = {
+                        "signature": signature,
+                        "malware_family": record['alert'].get('metadata', {}).get('malware_family', [])
+                    }
 
                 alerts[signature_id].append(f"{timestamp} {src_ip}:{src_port} -> {dest_ip}:{dest_port}")
 
@@ -454,15 +457,16 @@ class Suricata(ServiceBase):
 
         # Create the result sections if there are any hits
         if len(alerts) > 0:
-            for signature_id, signature in signatures.items():
+            for signature_id, signature_details in signatures.items():
+                signature = signature_details['signature']
                 section = ResultSection(f'{signature_id}: {signature}')
+                heur_id = 3
                 if any(x in signature for x in self.config.get("sure_score")):
-                    section.set_heuristic(1)
+                    heur_id = 1
                 elif any(x in signature for x in self.config.get("vhigh_score")):
-                    section.set_heuristic(2)
-                else:
-                    section.set_heuristic(3)
+                    heur_id = 2
 
+                section.set_heuristic(heur_id)
                 for flow in alerts[signature_id][:10]:
                     section.add_line(flow)
                 if len(alerts[signature_id]) > 10:
@@ -471,6 +475,9 @@ class Suricata(ServiceBase):
                 # Add a tag for the signature id and the message
                 section.add_tag('network.signature.signature_id', str(signature_id))
                 section.add_tag('network.signature.message', signature)
+                # Tag malware_family
+                for malware_family in signature_details['malware_family']:
+                    section.add_tag('attribution.family', malware_family)
 
                 result.add_section(section)
 
