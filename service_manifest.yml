@@ -9,7 +9,7 @@ stage: CORE
 category: Networking
 
 file_required: true
-timeout: 60
+timeout: 180
 disable_cache: false
 
 enabled: true
