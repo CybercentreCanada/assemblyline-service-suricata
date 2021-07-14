@@ -10,7 +10,7 @@ import yaml
 
 from io import StringIO
 from pathlib import Path
-from retrying import retry
+from retrying import retry, RetryError
 
 from assemblyline.common.digests import get_sha256_for_file
 from assemblyline.common.exceptions import RecoverableError
@@ -159,7 +159,10 @@ class Suricata(ServiceBase):
 
     def start_suricata_if_necessary(self):
         if not self.suricata_running():
-            self.launch_or_load_suricata()
+            try:
+                self.launch_or_load_suricata()
+            except RetryError as e:
+                raise RecoverableError(e)
 
     # Try connecting to the Suricata socket
     def suricata_running(self):
