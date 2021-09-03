@@ -1,34 +1,40 @@
+import certifi
 import glob
-import json
 import logging
 import os
 import re
+import requests
 import shutil
 import tempfile
 import time
+
+from git import Repo
 from typing import List, Dict, Any
 from urllib.parse import urlparse
 from zipfile import ZipFile
 
-import certifi
-import requests
-import yaml
 from assemblyline_client import get_client
-from git import Repo
-
 from assemblyline.common import log as al_log, forge
 from assemblyline.common.digests import get_sha256_for_file
-from assemblyline.common.isotime import iso_to_epoch
+from assemblyline.common.isotime import iso_to_epoch, epoch_to_iso
+from assemblyline.odm.models.service import Service, UpdateSource
+from assemblyline_v4_service.updater.updater import ServiceUpdater, temporary_api_key
+
 from suricata_.suricata_importer import SuricataImporter
 
 al_log.init_logging('updater.suricata')
 classification = forge.get_classification()
 
-LOGGER = logging.getLogger('assemblyline.updater.suricata')
-
 UPDATE_CONFIGURATION_PATH = os.environ.get('UPDATE_CONFIGURATION_PATH', "/tmp/suricata_updater_config.yaml")
 UPDATE_OUTPUT_PATH = os.environ.get('UPDATE_OUTPUT_PATH', "/tmp/suricata_updater_output")
 UPDATE_DIR = os.path.join(tempfile.gettempdir(), 'suricata_updates')
+LOGGER = logging.getLogger('assemblyline.updater.suricata')
+
+UI_SERVER = os.getenv('UI_SERVER', 'https://nginx')
+
+
+class SkipSource(RuntimeError):
+    pass
 
 
 def add_cacert(cert: str):
@@ -84,7 +90,7 @@ def url_download(source: Dict[str, Any], previous_update=None) -> List:
             # Compare the last modified time with the last updated time
             if previous_update and last_modified <= previous_update:
                 # File has not been modified since last update, do nothing
-                return []
+                raise SkipSource()
 
         if previous_update:
             previous_update = time.strftime("%a, %d %b %Y %H:%M:%S %Z", time.gmtime(previous_update))
@@ -98,7 +104,7 @@ def url_download(source: Dict[str, Any], previous_update=None) -> List:
         # Check the response code
         if response.status_code == requests.codes['not_modified']:
             # File has not been modified since last update, do nothing
-            return []
+            raise SkipSource()
         elif response.ok:
             if not os.path.exists(UPDATE_DIR):
                 os.makedirs(UPDATE_DIR)
@@ -190,7 +196,7 @@ def git_clone_repo(source: Dict[str, Any], previous_update=None) -> List:
             previous_update = iso_to_epoch(previous_update)
         for c in repo.iter_commits():
             if c.committed_date < previous_update:
-                return []
+                raise SkipSource()
             break
 
     if pattern:
@@ -206,102 +212,122 @@ def git_clone_repo(source: Dict[str, Any], previous_update=None) -> List:
     return files
 
 
-def suricata_update() -> None:
-    """
-    Using an update configuration file as an input, which contains a list of sources, download all the file(s).
-    """
-    # noinspection PyBroadException
-    try:
-        # Load updater configuration
-        update_config = {}
-        if UPDATE_CONFIGURATION_PATH and os.path.exists(UPDATE_CONFIGURATION_PATH):
-            with open(UPDATE_CONFIGURATION_PATH, 'r') as yml_fh:
-                update_config = yaml.safe_load(yml_fh)
-        else:
-            LOGGER.error(f"Update configuration file doesn't exist: {UPDATE_CONFIGURATION_PATH}")
-            exit()
+class SuricataUpdateServer(ServiceUpdater):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.updater_type = "suricata"
 
-        # Exit if no update sources given
-        if 'sources' not in update_config.keys() or not update_config['sources']:
-            LOGGER.error("Update configuration does not contain any source to update from")
-            exit()
+    def do_local_update(self) -> None:
+        old_update_time = self.get_local_update_time()
+        run_time = time.time()
+        output_directory = tempfile.mkdtemp()
 
-        # Initialise al_client
-        server = update_config['ui_server']
-        user = update_config['api_user']
-        api_key = update_config['api_key']
-        LOGGER.info(f"Connecting to Assemblyline API: {server}...")
-        al_client = get_client(server, apikey=(user, api_key), verify=False)
-        LOGGER.info("Connected!")
+        self.log.info("Setup service account.")
+        username = self.ensure_service_account()
+        self.log.info("Create temporary API key.")
+        with temporary_api_key(self.datastore, username) as api_key:
+            self.log.info(f"Connecting to Assemblyline API: {UI_SERVER}")
+            al_client = get_client(UI_SERVER, apikey=(username, api_key), verify=False)
 
-        # Parse updater configuration
-        previous_update = update_config.get('previous_update', None)
-        previous_hash = json.loads(update_config.get('previous_hash', None) or "{}")
-        sources = {source['name']: source for source in update_config['sources']}
-        files_sha256 = {}
-        source_default_classification = {}
+            # Check if new signatures have been added
+            self.log.info("Check for new signatures.")
+            if al_client.signature.update_available(
+                    since=epoch_to_iso(old_update_time) or '', sig_type=self.updater_type)['update_available']:
+                self.log.info("An update is available for download from the datastore")
 
-        # Go through each source and download file
-        for source_name, source in sources.items():
-            uri: str = source['uri']
-            source_default_classification[source_name] = source.get('default_classification',
-                                                                    classification.UNRESTRICTED)
+                extracted_zip = False
+                attempt = 0
 
-            if uri.endswith('.git'):
-                files = git_clone_repo(source, previous_update=previous_update)
-                for file, sha256 in files:
-                    files_sha256.setdefault(source_name, {})
-                    if previous_hash.get(source_name, {}).get(file, None) != sha256:
-                        files_sha256[source_name][file] = sha256
+                # Sometimes a zip file isn't always returned, will affect service's use of signature source. Patience..
+                while not extracted_zip and attempt < 5:
+                    temp_zip_file = os.path.join(output_directory, 'temp.zip')
+                    al_client.signature.download(
+                        output=temp_zip_file, query=f"type:{self.updater_type} AND (status:NOISY OR status:DEPLOYED)")
+
+                    if os.path.exists(temp_zip_file):
+                        try:
+                            with ZipFile(temp_zip_file, 'r') as zip_f:
+                                zip_f.extractall(output_directory)
+                                extracted_zip = True
+                                self.log.info("Zip extracted.")
+                        except Exception:
+                            attempt += 1
+                            self.log.warning(f"[{attempt}/5] Bad zip. Trying again after 30s...")
+                            time.sleep(30)
+
+                        os.remove(temp_zip_file)
+
+                if attempt == 5:
+                    self.log.error("Signatures aren't saved to disk. Check sources..")
+                    shutil.rmtree(output_directory, ignore_errors=True)
+                else:
+                    self.log.info("New ruleset successfully downloaded and ready to use")
+                    self.serve_directory(output_directory)
+                    self.set_local_update_time(run_time)
+
+    def do_source_update(self, service: Service) -> None:
+        self.log.info(f"Connecting to Assemblyline API: {UI_SERVER}...")
+        run_time = time.time()
+        username = self.ensure_service_account()
+        with temporary_api_key(self.datastore, username) as api_key:
+            al_client = get_client(UI_SERVER, apikey=(username, api_key), verify=False)
+            old_update_time = self.get_source_update_time()
+
+            self.log.info("Connected!")
+
+            # Parse updater configuration
+            previous_hashes: dict[str, str] = self.get_source_extra()
+            sources: dict[str, UpdateSource] = {_s['name']: _s for _s in service.update_config.sources}
+            files_sha256: dict[str, str] = {}
+            source_default_classification = {}
+
+            # Go through each source and download file
+            for source_name, source_obj in sources.items():
+                source = source_obj.as_primitives()
+                uri: str = source['uri']
+                cache_name = f"{source_name}.rules"
+                source_default_classification[source_name] = source.get('default_classification',
+                                                                        classification.UNRESTRICTED)
+                try:
+                    if uri.endswith('.git'):
+                        files = git_clone_repo(source, previous_update=old_update_time)
+                        for file, sha256 in files:
+                            files_sha256.setdefault(source_name, {})
+                            if previous_hashes.get(source_name, {}).get(file, None) != sha256:
+                                files_sha256[source_name][file] = sha256
+                    else:
+                        files = url_download(source, previous_update=old_update_time)
+                        for file, sha256 in files:
+                            files_sha256.setdefault(source_name, {})
+                            if previous_hashes.get(source_name, {}).get(file, None) != sha256:
+                                files_sha256[source_name][file] = sha256
+                except SkipSource:
+                    if cache_name in previous_hashes:
+                        files_sha256[cache_name] = previous_hashes[cache_name]
+                    continue
+
+            if files_sha256:
+                LOGGER.info("Found new Suricata rule files to process!")
+
+                suricata_importer = SuricataImporter(al_client, logger=LOGGER)
+
+                for source, source_val in files_sha256.items():
+                    total_imported = 0
+                    default_classification = source_default_classification[source]
+                    for file in source_val.keys():
+                        total_imported += suricata_importer.import_file(file, source,
+                                                                        default_classification=default_classification)
+                    LOGGER.info(f"{total_imported} signatures were imported for source {source}")
+
             else:
-                files = url_download(source, previous_update=previous_update)
-                for file, sha256 in files:
-                    files_sha256.setdefault(source_name, {})
-                    if previous_hash.get(source_name, {}).get(file, None) != sha256:
-                        files_sha256[source_name][file] = sha256
+                LOGGER.info('No new Suricata rule files to process')
 
-        if files_sha256:
-            LOGGER.info("Found new Suricata rule files to process!")
-
-            suricata_importer = SuricataImporter(al_client, logger=LOGGER)
-
-            for source, source_val in files_sha256.items():
-                total_imported = 0
-                default_classification = source_default_classification[source]
-                for file in source_val.keys():
-                    total_imported += suricata_importer.import_file(file, source,
-                                                                    default_classification=default_classification)
-                LOGGER.info(f"{total_imported} signatures were imported for source {source}")
-
-        else:
-            LOGGER.info('No new Suricata rule files to process')
-
-        if al_client.signature.update_available(since=previous_update or '', sig_type='suricata')['update_available']:
-            LOGGER.info("An update is available for download from the datastore")
-
-            if not os.path.exists(UPDATE_OUTPUT_PATH):
-                os.makedirs(UPDATE_OUTPUT_PATH)
-
-            temp_zip_file = os.path.join(UPDATE_OUTPUT_PATH, 'temp.zip')
-            al_client.signature.download(output=temp_zip_file,
-                                         query="type:suricata AND (status:NOISY OR status:DEPLOYED)")
-
-            if os.path.exists(temp_zip_file):
-                with ZipFile(temp_zip_file, 'r') as zip_f:
-                    zip_f.extractall(UPDATE_OUTPUT_PATH)
-
-                os.remove(temp_zip_file)
-
-            # Create the response yaml
-            with open(os.path.join(UPDATE_OUTPUT_PATH, 'response.yaml'), 'w') as yml_fh:
-                yaml.safe_dump(dict(hash=json.dumps(files_sha256)), yml_fh)
-
-            LOGGER.info("New ruleset successfully downloaded and ready to use")
-
-        LOGGER.info("Suricata updater completed successfully")
-    except Exception:
-        LOGGER.exception("Updater ended with an exception!")
+        self.set_source_update_time(run_time)
+        self.set_source_extra(files_sha256)
+        self.set_active_config_hash(self.config_hash(service))
+        self.local_update_flag.set()
 
 
 if __name__ == '__main__':
-    suricata_update()
+    with SuricataUpdateServer() as server:
+        server.serve_forever()

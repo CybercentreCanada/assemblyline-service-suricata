@@ -51,6 +51,15 @@ docker_config:
   cpu_cores: 1
   ram_mb: 1536
 
+dependencies:
+  updates:
+    container:
+      allow_internet_access: true
+      command: ["python", "-m", "suricata_.update_server"]
+      image: ${REGISTRY}cccs/assemblyline-service-suricata:$SERVICE_TAG
+      ports: ["5003"]
+    run_as_core: True
+
 update_config:
   generates_signatures: true
   method: run

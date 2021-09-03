@@ -94,6 +94,9 @@ RUN touch /etc/suricata/suricata-rules-update
 RUN chown -R assemblyline /var/lib/suricata/
 RUN chown assemblyline /etc/suricata/suricata-rules-update
 
+# Install packages for update-server
+RUN pip install gunicorn flask && rm -rf ~/.cache/pip
+
 # Switch to assemblyline user
 USER assemblyline
 
