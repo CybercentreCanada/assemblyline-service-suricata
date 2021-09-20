@@ -102,11 +102,14 @@ class Suricata(ServiceBase):
         return new_filepath
 
     def start(self):
-        try:
-            # Load the rules
-            self._update_rules()
-        except Exception as e:
-            raise Exception(f"Something went wrong while trying to load Suricata rules: {str(e)}")
+        while True:
+            try:
+                # Load the rules
+                self._update_rules()
+                break
+            except Exception as e:
+                raise Exception(f"Something went wrong while trying to load {self.name} rules: {str(e)}")
+            time.sleep(15)
 
         if not self.rules_list:
             self.log.warning("No valid suricata ruleset found. Suricata will run without rules...")
