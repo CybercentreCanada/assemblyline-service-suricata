@@ -1,22 +1,9 @@
-import certifi
-import glob
-import logging
 import os
-import re
-import requests
-import shutil
 import tempfile
 import time
 
-from git import Repo
-from typing import List, Dict, Any
-from urllib.parse import urlparse
-from zipfile import ZipFile
-
 from assemblyline_client import get_client
 from assemblyline.common import log as al_log, forge
-from assemblyline.common.digests import get_sha256_for_file
-from assemblyline.common.isotime import iso_to_epoch, epoch_to_iso
 from assemblyline.odm.models.service import Service, UpdateSource
 from assemblyline_v4_service.updater.updater import ServiceUpdater, temporary_api_key
 from assemblyline_v4_service.updater.helper import git_clone_repo, url_download, SkipSource
