@@ -1,6 +1,7 @@
 import os
 import tempfile
 import time
+import logging
 
 from assemblyline_client import get_client
 from assemblyline.common import log as al_log, forge
@@ -10,7 +11,8 @@ from assemblyline_v4_service.updater.helper import git_clone_repo, url_download,
 
 from suricata_.suricata_importer import SuricataImporter
 
-al_log.init_logging('updater.suricata')
+al_log.init_logging('updater.suricata', log_level=os.environ.get('LOG_LEVEL', "WARNING"))
+LOGGER = logging.getLogger('assemblyline.updater.suricata')
 classification = forge.get_classification()
 
 UPDATE_CONFIGURATION_PATH = os.environ.get('UPDATE_CONFIGURATION_PATH', "/tmp/suricata_updater_config.yaml")
@@ -89,5 +91,5 @@ class SuricataUpdateServer(ServiceUpdater):
 
 
 if __name__ == '__main__':
-    with SuricataUpdateServer() as server:
+    with SuricataUpdateServer(logger=LOGGER) as server:
         server.serve_forever()
