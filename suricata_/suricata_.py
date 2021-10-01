@@ -2,13 +2,9 @@ import dateutil.parser as dateparser
 import hashlib
 import json
 import os
-import requests
-import shutil
 import subprocess
 import suricatasc
 import sys
-import tarfile
-import tempfile
 import time
 import yaml
 
@@ -24,9 +20,6 @@ from assemblyline_v4_service.common.request import MaxExtractedExceeded
 from assemblyline_v4_service.common.result import BODY_FORMAT, Result, ResultSection
 
 SURICATA_BIN = "/usr/local/bin/suricata"
-UPDATES_HOST = os.environ.get('updates_host')
-UPDATES_PORT = os.environ.get('updates_port')
-UPDATES_KEY = os.environ.get('updates_key')
 
 
 class Suricata(ServiceBase):
@@ -48,48 +41,6 @@ class Suricata(ServiceBase):
         self.update_time = None
         self.rules_hash = ''
 
-    def _download_rules(self):
-        url_base = f'http://{UPDATES_HOST}:{UPDATES_PORT}/'
-        headers = {
-            'X_APIKEY': UPDATES_KEY
-        }
-
-        # Check if there are new
-        while True:
-            resp = requests.get(url_base + 'status')
-            resp.raise_for_status()
-            status = resp.json()
-            if self.update_time is not None and self.update_time >= status['local_update_time']:
-                return False
-            if status['download_available']:
-                break
-            self.log.warning('Waiting on update server availability...')
-            time.sleep(10)
-
-        # Download the current update
-        temp_directory = tempfile.mkdtemp()
-        buffer_handle, buffer_name = tempfile.mkstemp()
-        try:
-            with os.fdopen(buffer_handle, 'wb') as buffer:
-                resp = requests.get(url_base + 'tar', headers=headers)
-                resp.raise_for_status()
-                for chunk in resp.iter_content(chunk_size=1024):
-                    buffer.write(chunk)
-
-            tar_handle = tarfile.open(buffer_name)
-            tar_handle.extractall(temp_directory)
-            self.update_time = status['local_update_time']
-            self.rules_directory, temp_directory = temp_directory, self.rules_directory
-            return True
-        finally:
-            os.unlink(buffer_name)
-            if temp_directory is not None:
-                shutil.rmtree(temp_directory, ignore_errors=True)
-
-    def _update_rules(self):
-        if self._download_rules():
-            self.rules_hash = self._get_rules_hash()
-
     # Use an external tool to strip frame headers
     @staticmethod
     def strip_frame_headers(filepath):
@@ -102,15 +53,9 @@ class Suricata(ServiceBase):
         return new_filepath
 
     def start(self):
-        while True:
-            try:
-                # Load the rules
-                self._update_rules()
-                break
-            except Exception as e:
-                raise Exception(f"Something went wrong while trying to load {self.name} rules: {str(e)}")
-            time.sleep(15)
+        self.log.info(f"Suricata started with service version: {self.get_service_version()}")
 
+    def _load_rules(self) -> None:
         if not self.rules_list:
             self.log.warning("No valid suricata ruleset found. Suricata will run without rules...")
 
@@ -135,15 +80,6 @@ class Suricata(ServiceBase):
                 else:
                     self.log.warning(f"Ruleset {ruleset['id']}: {ruleset['rules_failed']} rules failed to load."
                                      "This can be due to duplication of rules among muliple rulesets being loaded.")
-
-        self.log.info(f"Suricata started with service version: {self.get_service_version()}")
-
-    def _cleanup(self) -> None:
-        super()._cleanup()
-        try:
-            self._update_rules()
-        except Exception as e:
-            raise Exception(f"Something went wrong while trying to load Suricata rules: {str(e)}")
 
     def _get_rules_hash(self):
         self.rules_list = [str(f) for f in Path(self.rules_directory).rglob("*") if os.path.isfile(str(f))]
