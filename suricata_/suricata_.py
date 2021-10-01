@@ -28,18 +28,12 @@ class Suricata(ServiceBase):
 
         self.home_net = self.config.get("home_net", "any")
         self.rules_config = yaml.safe_dump({"rule-files": []})
-        self.rules_list = []
         self.run_dir = "/var/run/suricata"
         self.suricata_socket = None
         self.suricata_sc = None
         self.suricata_process = None
         self.suricata_yaml = "/etc/suricata/suricata.yaml"
         self.suricata_log = "/var/log/suricata/suricata.log"
-
-        # Updater-related
-        self.rules_directory = None
-        self.update_time = None
-        self.rules_hash = ''
 
     # Use an external tool to strip frame headers
     @staticmethod
@@ -77,9 +71,11 @@ class Suricata(ServiceBase):
                 self.log.info(f"Ruleset {ruleset['id']}: {ruleset['rules_loaded']} rules loaded")
                 if ruleset['rules_failed'] and ruleset['rules_loaded'] == 0:
                     self.log.error(f"Ruleset {ruleset['id']}: {ruleset['rules_failed']} rules failed to load")
+                    return False
                 else:
                     self.log.warning(f"Ruleset {ruleset['id']}: {ruleset['rules_failed']} rules failed to load."
                                      "This can be due to duplication of rules among muliple rulesets being loaded.")
+        return True
 
     def _get_rules_hash(self):
         self.rules_list = [str(f) for f in Path(self.rules_directory).rglob("*") if os.path.isfile(str(f))]
