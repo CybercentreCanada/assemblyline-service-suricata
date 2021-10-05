@@ -1,5 +1,4 @@
 import dateutil.parser as dateparser
-import hashlib
 import json
 import os
 import subprocess
@@ -9,10 +8,8 @@ import time
 import yaml
 
 from io import StringIO
-from pathlib import Path
 from retrying import retry, RetryError
 
-from assemblyline.common.digests import get_sha256_for_file
 from assemblyline.common.exceptions import RecoverableError
 from assemblyline.common.str_utils import safe_str
 from assemblyline_v4_service.common.base import ServiceBase
@@ -74,17 +71,6 @@ class Suricata(ServiceBase):
                 else:
                     self.log.warning(f"Ruleset {ruleset['id']}: {ruleset['rules_failed']} rules failed to load."
                                      "This can be due to duplication of rules among muliple rulesets being loaded.")
-
-    def _get_rules_hash(self):
-        self.rules_list = [str(f) for f in Path(self.rules_directory).rglob("*") if os.path.isfile(str(f))]
-        all_sha256s = [get_sha256_for_file(f) for f in self.rules_list]
-
-        self.log.info(f"Suricata will load the following rule files: {self.rules_list}")
-
-        if len(all_sha256s) == 1:
-            return all_sha256s[0][:7]
-
-        return hashlib.sha256(' '.join(sorted(all_sha256s)).encode('utf-8')).hexdigest()[:7]
 
     def get_tool_version(self):
         """
