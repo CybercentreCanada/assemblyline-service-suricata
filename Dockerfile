@@ -9,8 +9,7 @@ USER root
 RUN echo 'deb http://deb.debian.org/debian stretch-backports main' >> /etc/apt/sources.list
 
 # Install APT dependancies
-RUN apt-get update && apt-get install -y \
-  git wget curl \
+RUN apt-get update && apt-get install -y wget curl \
   libpcre3 libpcre3-dbg libpcre3-dev build-essential libpcap-dev   \
   libnet1-dev libyaml-0-2 libyaml-dev pkg-config zlib1g zlib1g-dev \
   libcap-ng-dev libcap-ng0 make libmagic-dev libjansson-dev\
@@ -24,7 +23,6 @@ FROM base AS build
 USER assemblyline
 RUN touch /tmp/before-pip
 RUN pip install --no-cache-dir --user \
-  gitpython \
   simplejson \
   python-dateutil \
   suricata-update \

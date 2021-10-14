@@ -1,5 +1,4 @@
 import dateutil.parser as dateparser
-import hashlib
 import json
 import os
 import subprocess
@@ -9,10 +8,8 @@ import time
 import yaml
 
 from io import StringIO
-from pathlib import Path
 from retrying import retry, RetryError
 
-from assemblyline.common.digests import get_sha256_for_file
 from assemblyline.common.exceptions import RecoverableError
 from assemblyline.common.str_utils import safe_str
 from assemblyline_v4_service.common.base import ServiceBase
@@ -20,7 +17,6 @@ from assemblyline_v4_service.common.request import MaxExtractedExceeded
 from assemblyline_v4_service.common.result import BODY_FORMAT, Result, ResultSection
 
 SURICATA_BIN = "/usr/local/bin/suricata"
-FILE_UPDATE_DIRECTORY = os.environ.get('FILE_UPDATE_DIRECTORY', '/mount/updates/')
 
 
 class Suricata(ServiceBase):
@@ -29,16 +25,12 @@ class Suricata(ServiceBase):
 
         self.home_net = self.config.get("home_net", "any")
         self.rules_config = yaml.safe_dump({"rule-files": []})
-        self.rules_list = []
         self.run_dir = "/var/run/suricata"
         self.suricata_socket = None
         self.suricata_sc = None
         self.suricata_process = None
         self.suricata_yaml = "/etc/suricata/suricata.yaml"
         self.suricata_log = "/var/log/suricata/suricata.log"
-
-        # Load rules
-        self.rules_hash = self._get_rules_hash()
 
     # Use an external tool to strip frame headers
     @staticmethod
@@ -52,6 +44,9 @@ class Suricata(ServiceBase):
         return new_filepath
 
     def start(self):
+        self.log.info(f"Suricata started with service version: {self.get_service_version()}")
+
+    def _load_rules(self) -> None:
         if not self.rules_list:
             self.log.warning("No valid suricata ruleset found. Suricata will run without rules...")
 
@@ -76,34 +71,6 @@ class Suricata(ServiceBase):
                 else:
                     self.log.warning(f"Ruleset {ruleset['id']}: {ruleset['rules_failed']} rules failed to load."
                                      "This can be due to duplication of rules among muliple rulesets being loaded.")
-
-        self.log.info(f"Suricata started with service version: {self.get_service_version()}")
-
-    def _get_rules_hash(self):
-        if not os.path.exists(FILE_UPDATE_DIRECTORY):
-            self.log.warning("Suricata rules directory not found")
-            return None
-
-        try:
-            rules_directory = max([os.path.join(FILE_UPDATE_DIRECTORY, d) for d in os.listdir(FILE_UPDATE_DIRECTORY)
-                                   if os.path.isdir(os.path.join(FILE_UPDATE_DIRECTORY, d))
-                                   and not d.startswith('.tmp')],
-                                  key=os.path.getctime)
-        except ValueError:
-            self.log.warning("Suricata rules directory not found")
-            return None
-
-        self.rules_list = [os.path.relpath(str(f), start=FILE_UPDATE_DIRECTORY)
-                           for f in Path(rules_directory).rglob("*") if os.path.isfile(str(f))]
-
-        all_sha256s = [get_sha256_for_file(os.path.join(FILE_UPDATE_DIRECTORY, f)) for f in self.rules_list]
-
-        self.log.info(f"Suricata will load the following rule files: {self.rules_list}")
-
-        if len(all_sha256s) == 1:
-            return all_sha256s[0][:7]
-
-        return hashlib.sha256(' '.join(sorted(all_sha256s)).encode('utf-8')).hexdigest()[:7]
 
     def get_tool_version(self):
         """
