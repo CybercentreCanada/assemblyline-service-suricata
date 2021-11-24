@@ -72,20 +72,15 @@ class Suricata(ServiceBase):
                     self.log.warning(f"Ruleset {ruleset['id']}: {ruleset['rules_failed']} rules failed to load."
                                      "This can be due to duplication of rules among muliple rulesets being loaded.")
 
+    def get_suricata_version(self):
+        return safe_str(subprocess.check_output(["suricata", "-V"]).strip().replace(b"This is Suricata version ", b""))
+
     def get_tool_version(self):
         """
         Return the version of suricata used for processing
         :return:
         """
-        version_string = subprocess.check_output(["suricata", "-V"]).strip().replace(b"This is Suricata version ", b"")
-        return safe_str(version_string)
-
-    def get_service_version(self):
-        basic_version = super(Suricata, self).get_service_version()
-        if self.rules_hash and self.rules_hash not in basic_version:
-            return f'{basic_version}.r{self.rules_hash}'
-        else:
-            return basic_version
+        return f'{self.get_suricata_version()}.r{self.rules_hash}'
 
     # When we're shutting down, kill the Suricata child process as well
     def stop(self):
