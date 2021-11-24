@@ -174,7 +174,7 @@ class Suricata(ServiceBase):
         extracted = set()
 
         # Report the version of suricata as the service context
-        request.set_service_context(f"Suricata version: {self.get_tool_version()}")
+        request.set_service_context(f"Suricata version: {self.get_suricata_version()}")
 
         # restart Suricata if we need to
         self.start_suricata_if_necessary()
