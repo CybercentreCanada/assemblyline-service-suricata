@@ -11,7 +11,7 @@ from assemblyline.odm.models.signature import Signature
 
 UPDATE_CONFIGURATION_PATH = os.environ.get('UPDATE_CONFIGURATION_PATH', None)
 
-BATCH_SIZE_LIMIT = os.environ.get('SIG_BATCH_SIZE', 80)
+BATCH_SIZE_LIMIT = int(os.environ.get('SIG_BATCH_SIZE', 80))
 
 class SuricataImporter:
     def __init__(self, al_client, logger=None):
