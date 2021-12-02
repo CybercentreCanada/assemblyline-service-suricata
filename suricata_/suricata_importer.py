@@ -1,5 +1,7 @@
 import logging
 import os
+
+from sys import getsizeof
 from typing import List
 
 from suricata.update.rule import Rule, parse_file
@@ -9,6 +11,7 @@ from assemblyline.odm.models.signature import Signature
 
 UPDATE_CONFIGURATION_PATH = os.environ.get('UPDATE_CONFIGURATION_PATH', None)
 
+BATCH_SIZE_LIMIT = int(os.environ.get('SIG_BATCH_SIZE', 80))
 
 class SuricataImporter:
     def __init__(self, al_client, logger=None):
@@ -25,6 +28,7 @@ class SuricataImporter:
 
     def _save_signatures(self, signatures: List[Rule], source, cur_file, default_classification=None):
         order = 1
+        order_completed = 0
         upload_list = []
         for signature in signatures:
             name = signature.sid
@@ -44,9 +48,14 @@ class SuricataImporter:
 
             upload_list.append(sig.as_primitives())
             order += 1
+            # If approaching or surpassed 80MB, send to API (Default: Elasticsearch http.max_content_length = 100MB)
+            if getsizeof(upload_list) >= BATCH_SIZE_LIMIT * 1000 * 1000:
+                self.log.info(f'Surpassed {BATCH_SIZE_LIMIT}MB limit. Sending batch to Signature API..')
+                order_completed += self.update_client.signature.add_update_many(source, 'suricata', upload_list, dedup_name=False)['success']
+                upload_list = []
 
-        r = self.update_client.signature.add_update_many(source, 'suricata', upload_list, dedup_name=False)
-        self.log.info(f"Imported {r['success']}/{order - 1} signatures"
+        order_completed += self.update_client.signature.add_update_many(source, 'suricata', upload_list, dedup_name=False)['success']
+        self.log.info(f"Imported {order_completed}/{order - 1} signatures"
                       f" from {os.path.basename(cur_file)} into Assemblyline")
 
         return r['success']
