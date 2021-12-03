@@ -11,7 +11,8 @@ from assemblyline.odm.models.signature import Signature
 
 UPDATE_CONFIGURATION_PATH = os.environ.get('UPDATE_CONFIGURATION_PATH', None)
 
-BATCH_SIZE_LIMIT = int(os.environ.get('SIG_BATCH_SIZE', 80))
+BATCH_SIZE_LIMIT = int(os.environ.get('SIG_BATCH_SIZE', 1000))
+
 
 class SuricataImporter:
     def __init__(self, al_client, logger=None):
@@ -30,6 +31,7 @@ class SuricataImporter:
         order = 1
         order_completed = 0
         upload_list = []
+        add_update_many = self.update_client.signature.add_update_many
         for signature in signatures:
             name = signature.sid
             status = "DEPLOYED" if signature.enabled else "DISABLED"
@@ -48,17 +50,17 @@ class SuricataImporter:
 
             upload_list.append(sig.as_primitives())
             order += 1
-            # If approaching or surpassed 80MB, send to API (Default: Elasticsearch http.max_content_length = 100MB)
-            if getsizeof(upload_list) >= BATCH_SIZE_LIMIT * 1000 * 1000:
-                self.log.info(f'Surpassed {BATCH_SIZE_LIMIT}MB limit. Sending batch to Signature API..')
-                order_completed += self.update_client.signature.add_update_many(source, 'suricata', upload_list, dedup_name=False)['success']
+            # If we hit the batch size limit, send to API
+            if order % BATCH_SIZE_LIMIT == 0:
+                self.log.info(f'Batch limit reached: {BATCH_SIZE_LIMIT}. Sending batch to Signature API..')
+                order_completed += add_update_many(source, 'suricata', upload_list, dedup_name=False)['success']
                 upload_list = []
 
-        order_completed += self.update_client.signature.add_update_many(source, 'suricata', upload_list, dedup_name=False)['success']
+        order_completed += add_update_many(source, 'suricata', upload_list, dedup_name=False)['success']
         self.log.info(f"Imported {order_completed}/{order - 1} signatures"
                       f" from {os.path.basename(cur_file)} into Assemblyline")
 
-        return r['success']
+        return order_completed
 
     def import_file(self, file_path: str, source: str, default_classification: str = None):
         self.log.info(f"Importing file: {file_path}")
