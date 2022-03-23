@@ -276,7 +276,8 @@ class Suricata(ServiceBase):
                 if signature_id not in signatures:
                     signatures[signature_id] = {
                         "signature": signature,
-                        "malware_family": record['alert'].get('metadata', {}).get('malware_family', [])
+                        "malware_family": record['alert'].get('metadata', {}).get('malware_family', []),
+                        "al_signature": record['alert']['metadata']['al_signature'][0]
                     }
 
                 alerts[signature_id].append(f"{timestamp} {src_ip}:{src_port} -> {dest_ip}:{dest_port}")
@@ -384,7 +385,7 @@ class Suricata(ServiceBase):
 
         if tls_dict:
             tls_section = ResultSection("TLS Information", parent=root_section,
-                                        body_format=BODY_FORMAT.KEY_VALUE)
+                                        body_format=BODY_FORMAT.JSON)
             kv_body = {}
             for tls_type, tls_values in tls_dict.items():
                 if tls_type == "fingerprint":
@@ -418,7 +419,7 @@ class Suricata(ServiceBase):
                     kv_body[tls_type] = tls_values
                     # stick a message in the logs about a new TLS type found in suricata logs
                     self.log.info(f"Found new TLS type {tls_type} with values {tls_values}")
-            tls_section.set_body(kv_body)
+            tls_section.set_body(json.dumps(kv_body))
 
         # Create the result sections if there are any hits
         if len(alerts) > 0:
@@ -432,6 +433,7 @@ class Suricata(ServiceBase):
                     heur_id = 2
 
                 section.set_heuristic(heur_id)
+                section.add_tag("file.rule.suricata", signature_details['al_signature'])
                 for flow in alerts[signature_id][:10]:
                     section.add_line(flow)
                 if len(alerts[signature_id]) > 10:

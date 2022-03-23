@@ -1,7 +1,7 @@
+from copy import deepcopy
 import logging
 import os
 
-from sys import getsizeof
 from typing import List
 
 from suricata.update.rule import Rule, parse_file
@@ -33,16 +33,21 @@ class SuricataImporter:
         upload_list = []
         add_update_many = self.update_client.signature.add_update_many
         for signature in signatures:
-            name = signature.sid
+            name = signature.msg or signature.sid
             status = "DEPLOYED" if signature.enabled else "DISABLED"
+
+            # Update metadata to include reference to signature in Assemblyline
+            orig_meta, new_meta = signature.metadata, deepcopy(signature.metadata)
+            new_meta.append(f"al_signature {source}.{name}")
+            signature.raw = signature.raw.replace(", ".join(orig_meta), ", ".join(new_meta))
 
             sig = Signature(dict(
                 classification=default_classification or self.classification.UNRESTRICTED,
                 data=signature.raw,
-                name=signature.msg or name,
+                name=name,
                 order=order,
                 revision=int(float(signature.rev)),
-                signature_id=name,
+                signature_id=signature.sid,
                 source=source,
                 status=status,
                 type="suricata",
