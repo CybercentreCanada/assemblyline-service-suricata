@@ -277,7 +277,7 @@ class Suricata(ServiceBase):
                     signatures[signature_id] = {
                         "signature": signature,
                         "malware_family": record['alert'].get('metadata', {}).get('malware_family', []),
-                        "al_signature": record['alert']['metadata']['al_signature'][0]
+                        "al_signature": record['alert']['metadata'].get("al_signature", [None])[0]
                     }
 
                 alerts[signature_id].append(f"{timestamp} {src_ip}:{src_port} -> {dest_ip}:{dest_port}")
@@ -433,7 +433,8 @@ class Suricata(ServiceBase):
                     heur_id = 2
 
                 section.set_heuristic(heur_id)
-                section.add_tag("file.rule.suricata", signature_details['al_signature'])
+                if signature_details['al_signature']:
+                    section.add_tag("file.rule.suricata", signature_details['al_signature'])
                 for flow in alerts[signature_id][:10]:
                     section.add_line(flow)
                 if len(alerts[signature_id]) > 10:
