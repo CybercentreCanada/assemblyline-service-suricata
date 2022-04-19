@@ -230,7 +230,7 @@ class Suricata(ServiceBase):
         # tls stuff
         tls_dict = {}
 
-        file_extracted_section = None
+        file_extracted_section = ResultSection("File(s) extracted by Suricata")
 
         # Parse the json results of the service
         for line in open(os.path.join(self.working_directory, 'eve.json')):
@@ -325,7 +325,11 @@ class Suricata(ServiceBase):
                     self.log.info(f"extracted file {filename}")
                     extracted.add(sha256)
                     try:
-                        request.add_extracted(extracted_file_path, filename, "Extracted by suricata")
+                        if request.add_extracted(extracted_file_path, filename, "Extracted by Suricata",
+                                                 safelist_interface=self.api_interface):
+                            file_extracted_section.add_line(filename)
+                            if filename != sha256:
+                                file_extracted_section.add_tag('file.name.extracted', filename)
                     except FileNotFoundError as e:
                         # An intermittent issue, just try again
                         raise RecoverableError(e)
@@ -333,14 +337,10 @@ class Suricata(ServiceBase):
                         # We've hit our limit
                         pass
 
-                    # Report a null score to indicate that files were extracted. If no sigs hit, it's not clear
-                    # where the extracted files came from
-                    if file_extracted_section is None:
-                        file_extracted_section = ResultSection("File(s) extracted by suricata", parent=result)
-
-                    file_extracted_section.add_line(filename)
-                    if filename != sha256:
-                        file_extracted_section.add_tag('file.name.extracted', filename)
+            # Report a null score to indicate that files were extracted. If no sigs hit, it's not clear
+            # where the extracted files came from
+            if file_extracted_section.body:
+                result.add_section(file_extracted_section)
 
         # Add tags for the domains, urls, and IPs we've discovered
         root_section = ResultSection("Discovered IOCs", parent=result)
