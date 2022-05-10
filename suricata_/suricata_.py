@@ -337,10 +337,10 @@ class Suricata(ServiceBase):
                         # We've hit our limit
                         pass
 
-            # Report a null score to indicate that files were extracted. If no sigs hit, it's not clear
-            # where the extracted files came from
-            if file_extracted_section.body:
-                result.add_section(file_extracted_section)
+        # Report a null score to indicate that files were extracted. If no sigs hit, it's not clear
+        # where the extracted files came from
+        if file_extracted_section.body:
+            result.add_section(file_extracted_section)
 
         # Add tags for the domains, urls, and IPs we've discovered
         root_section = ResultSection("Discovered IOCs", parent=result)
