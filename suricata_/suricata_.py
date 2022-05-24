@@ -130,7 +130,7 @@ class Suricata(ServiceBase):
                     sha256 = f"{sha256_full[:12]}.data"
                     extracted_files['sha256_full'] = {
                             'sha256': sha256,
-                            'filename': os.path.basename(record["fileinfo"]["filename"]) or sha256,
+                            'filename': os.path.basename(record["fileinfo"].get('filename',  sha256)),
                             'extracted_file_path': os.path.join(working_dir, 'filestore', sha256_full[:2].lower(), sha256_full)
                         }
         return dict(alerts=alerts, signatures=signatures, domains=domains, ips=ips, urls=urls,
