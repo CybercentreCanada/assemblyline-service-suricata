@@ -9,6 +9,7 @@ import yaml
 
 from io import StringIO
 from retrying import retry, RetryError
+from typing import Dict, Any
 
 from assemblyline.common.exceptions import RecoverableError
 from assemblyline.common.str_utils import safe_str
@@ -31,6 +32,109 @@ class Suricata(ServiceBase):
         self.suricata_process = None
         self.suricata_yaml = "/etc/suricata/suricata.yaml"
         self.suricata_log = "/var/log/suricata/suricata.log"
+
+    @staticmethod
+    def parse_suricata_output(working_dir) -> Dict[str, Any]:
+        alerts = {}
+        signatures = {}
+        domains = []
+        ips = []
+        urls = []
+        email_addresses = []
+        tls_dict = {}
+        extracted_files = {}
+
+        # Parse the json results of the service
+        for line in open(os.path.join(working_dir, 'eve.json')):
+            record = json.loads(line)
+
+            timestamp = dateparser.parse(record['timestamp']).isoformat(' ')
+            src_ip = record.get('src_ip')
+            src_port = record.get('src_port')
+            dest_ip = record.get('dest_ip')
+            dest_port = record.get('dest_port')
+
+            if src_ip is not None and src_ip not in ips:
+                ips.append(src_ip)
+            if dest_ip is not None and dest_ip not in ips:
+                ips.append(dest_ip)
+
+            if record['event_type'] == 'http':
+                if 'hostname' not in record['http'] or 'url' not in record['http']:
+                    continue
+
+                domain = record['http']['hostname']
+                if domain not in domains and domain not in ips:
+                    domains.append(domain)
+                url = "http://" + domain + record['http']['url']
+                if url not in urls:
+                    urls.append(url)
+
+            if record['event_type'] == 'dns':
+                if 'rrname' not in record['dns']:
+                    continue
+                domain = record['dns']['rrname']
+                if domain not in domains and domain not in ips:
+                    domains.append(domain)
+
+            if record['event_type'] == 'alert':
+                if 'signature_id' not in record['alert'] or 'signature' not in record['alert']:
+                    continue
+                signature_id = record['alert']['signature_id']
+                signature = record['alert']['signature']
+
+                if signature_id not in alerts:
+                    alerts[signature_id] = []
+                if signature_id not in signatures:
+                    signatures[signature_id] = {
+                        "signature": signature,
+                        "malware_family": record['alert'].get('metadata', {}).get('malware_family', []),
+                        "al_signature": record['alert']['metadata'].get("al_signature", [None])[0]
+                    }
+
+                alerts[signature_id].append(f"{timestamp} {src_ip}:{src_port} -> {dest_ip}:{dest_port}")
+
+            if record["event_type"] == "smtp":
+                # extract email metadata
+                if "smtp" not in record:
+                    continue
+                if not isinstance(record["smtp"], dict):
+                    continue
+
+                mail_from = record["smtp"].get("mail_from")
+                if mail_from is not None:
+                    mail_from = mail_from.replace("<", "").replace(">", "")
+                    if mail_from not in email_addresses:
+                        email_addresses.append(mail_from)
+
+                for email_addr in record["smtp"].get("rcpt_to", []):
+                    email_addr = email_addr.replace("<", "").replace(">", "")
+                    if email_addr not in email_addresses:
+                        email_addresses.append(email_addr)
+
+            if record["event_type"] == "tls":
+                if "tls" not in record:
+                    continue
+                if not isinstance(record["tls"], dict):
+                    continue
+
+                for tls_type, tls_value in record["tls"].items():
+                    if tls_type not in tls_dict:
+                        tls_dict[tls_type] = []
+                    if tls_value not in tls_dict[tls_type]:
+                        tls_dict[tls_type].append(tls_value)
+
+            if record["event_type"] == "fileinfo":
+                sha256_full = record['fileinfo']['sha256']
+                if sha256_full not in extracted_files.keys():
+                    sha256 = f"{sha256_full[:12]}.data"
+                    extracted_files['sha256_full'] = {
+                            'sha256': sha256,
+                            'filename': os.path.basename(record["fileinfo"].get('filename',  sha256)),
+                            'extracted_file_path': os.path.join(working_dir, 'filestore', sha256_full[:2].lower(), sha256_full)
+                        }
+        return dict(alerts=alerts, signatures=signatures, domains=domains, ips=ips, urls=urls,
+        email_addresses=email_addresses, tls=tls_dict, extracted_files=extracted_files.values())
 
     # Use an external tool to strip frame headers
     @staticmethod
@@ -171,7 +275,6 @@ class Suricata(ServiceBase):
     def execute(self, request):
         file_path = request.file_path
         result = Result()
-        extracted = set()
 
         # Report the version of suricata as the service context
         request.set_service_context(f"Suricata version: {self.get_suricata_version()}")
@@ -220,122 +323,28 @@ class Suricata(ServiceBase):
         sys.stderr = old_stderr
         # NOTE: for now we will ignore content of mystdout and mystderr but we have them just in case...
 
-        alerts = {}
-        signatures = {}
-        domains = []
-        ips = []
-        urls = []
-        email_addresses = []
 
-        # tls stuff
-        tls_dict = {}
+        alerts, signatures, domains, ips, urls, email_addresses, tls_dict, extracted_files = \
+            Suricata.parse_suricata_output(self.working_directory).values()
 
         file_extracted_section = ResultSection("File(s) extracted by Suricata")
-
         # Parse the json results of the service
-        for line in open(os.path.join(self.working_directory, 'eve.json')):
-            record = json.loads(line)
-
-            timestamp = dateparser.parse(record['timestamp']).isoformat(' ')
-            src_ip = record.get('src_ip')
-            src_port = record.get('src_port')
-            dest_ip = record.get('dest_ip')
-            dest_port = record.get('dest_port')
-
-            if src_ip is not None and src_ip not in ips:
-                ips.append(src_ip)
-            if dest_ip is not None and dest_ip not in ips:
-                ips.append(dest_ip)
-
-            if record['event_type'] == 'http':
-                if 'hostname' not in record['http'] or 'url' not in record['http']:
-                    continue
-
-                domain = record['http']['hostname']
-                if domain not in domains and domain not in ips:
-                    domains.append(domain)
-                url = "http://" + domain + record['http']['url']
-                if url not in urls:
-                    urls.append(url)
-
-            if record['event_type'] == 'dns':
-                if 'rrname' not in record['dns']:
-                    continue
-                domain = record['dns']['rrname']
-                if domain not in domains and domain not in ips:
-                    domains.append(domain)
-
-            if record['event_type'] == 'alert':
-                if 'signature_id' not in record['alert'] or 'signature' not in record['alert']:
-                    continue
-                signature_id = record['alert']['signature_id']
-                signature = record['alert']['signature']
-
-                if signature_id not in alerts:
-                    alerts[signature_id] = []
-                if signature_id not in signatures:
-                    signatures[signature_id] = {
-                        "signature": signature,
-                        "malware_family": record['alert'].get('metadata', {}).get('malware_family', []),
-                        "al_signature": record['alert']['metadata'].get("al_signature", [None])[0]
-                    }
-
-                alerts[signature_id].append(f"{timestamp} {src_ip}:{src_port} -> {dest_ip}:{dest_port}")
-
-            if record["event_type"] == "smtp":
-                # extract email metadata
-                if "smtp" not in record:
-                    continue
-                if not isinstance(record["smtp"], dict):
-                    continue
-
-                mail_from = record["smtp"]["mail_from"]
-                if mail_from is not None:
-                    mail_from = mail_from.replace("<", "").replace(">", "")
-                    if mail_from not in email_addresses:
-                        email_addresses.append(mail_from)
-
-                for email_addr in record["smtp"]["rcpt_to"]:
-                    email_addr = email_addr.replace("<", "").replace(">", "")
-                    if email_addr not in email_addresses:
-                        email_addresses.append(email_addr)
-
-            if record["event_type"] == "tls":
-                if "tls" not in record:
-                    continue
-                if not isinstance(record["tls"], dict):
-                    continue
-
-                for tls_type, tls_value in record["tls"].items():
-                    if tls_type not in tls_dict:
-                        tls_dict[tls_type] = []
-                    if tls_value not in tls_dict[tls_type]:
-                        tls_dict[tls_type].append(tls_value)
-
-            # Check to see if any files were extracted
-            if request.get_param("extract_files") and record["event_type"] == "fileinfo":
-                sha256 = f"{record['fileinfo']['sha256'][:12]}.data"
-                filename = os.path.basename(record["fileinfo"]["filename"]) or sha256
-                extracted_file_path = os.path.join(self.working_directory,
-                                                   'filestore',
-                                                   record["fileinfo"]["sha256"][:2].lower(),
-                                                   record["fileinfo"]["sha256"])
-
-                if sha256 not in extracted:
-                    self.log.info(f"extracted file {filename}")
-                    extracted.add(sha256)
-                    try:
-                        if request.add_extracted(extracted_file_path, filename, "Extracted by Suricata",
-                                                 safelist_interface=self.api_interface):
-                            file_extracted_section.add_line(filename)
-                            if filename != sha256:
-                                file_extracted_section.add_tag('file.name.extracted', filename)
-                    except FileNotFoundError as e:
-                        # An intermittent issue, just try again
-                        raise RecoverableError(e)
-                    except MaxExtractedExceeded:
-                        # We've hit our limit
-                        pass
+        if request.get_param("extract_files"):
+            for file in extracted_files:
+                sha256, filename, extracted_file_path = file.values()
+                self.log.info(f"extracted file {filename}")
+                try:
+                    if request.add_extracted(extracted_file_path, filename, "Extracted by Suricata",
+                                                safelist_interface=self.api_interface):
+                        file_extracted_section.add_line(filename)
+                        if filename != sha256:
+                            file_extracted_section.add_tag('file.name.extracted', filename)
+                except FileNotFoundError as e:
+                    # An intermittent issue, just try again
+                    raise RecoverableError(e)
+                except MaxExtractedExceeded:
+                    # We've hit our limit
+                    pass
 
         # Report a null score to indicate that files were extracted. If no sigs hit, it's not clear
         # where the extracted files came from
