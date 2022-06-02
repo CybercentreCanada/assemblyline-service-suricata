@@ -15,7 +15,7 @@ from typing import Dict, Any
 
 from assemblyline.common.exceptions import RecoverableError
 from assemblyline.common.str_utils import safe_str
-from assemblyline.odm.models.ontology.results import Networking, Signature
+from assemblyline.odm.models.ontology.results import NetworkConnection, Signature
 from assemblyline_v4_service.common.base import ServiceBase
 from assemblyline_v4_service.common.request import MaxExtractedExceeded
 from assemblyline_v4_service.common.result import BODY_FORMAT, Result, ResultSection
@@ -182,10 +182,24 @@ class Suricata(ServiceBase):
         tls_dict = {}
         extracted_files = {}
 
-        # Parse the json results of the service
+        reverse_lookup = {}
+        event_types = {
+            'dns': [],
+            'http': [],
+            'alert': [],
+            'smpt': [],
+            'tls': [],
+            'fileinfo': [],
+        }
+        # Parse the json results of the service and organize them into certain categories
         for line in open(os.path.join(self.working_directory, 'eve.json')):
             record = json.loads(line)
+            if record['event_type'] in event_types.keys():
+                event_types[record['event_type']].append(record)
 
+        ordered_records = []
+        [ordered_records.extend(record) for record in event_types.values()]
+        for record in ordered_records:
             timestamp = dateparser.parse(record['timestamp']).isoformat(' ')
             src_ip = record.get('src_ip')
             src_port = record.get('src_port')
@@ -194,6 +208,10 @@ class Suricata(ServiceBase):
             proto = record.get('proto', 'TCP').lower()
 
             network_data = {
+                'objectid': {
+                    'tag': f"{reverse_lookup.get(dest_ip, dest_ip)}" + f"{f':{dest_port}' if dest_port else ''}",
+                    'time_observed': timestamp
+                },
                 'source_ip': src_ip,
                 'source_port': src_port,
                 'destination_ip': dest_ip,
@@ -226,7 +244,7 @@ class Suricata(ServiceBase):
                     'response_headers': {h['name'].replace('-', '_').lower(): h['value'] for h in http_details['response_headers']},
                     'response_status_code': http_details['status'],
                 }
-                self.ontology.add_result_part(Networking, network_data)
+                self.ontology.add_result_part(NetworkConnection, network_data)
 
             elif record['event_type'] == 'dns':
                 if 'rrname' not in record['dns']:
@@ -236,13 +254,17 @@ class Suricata(ServiceBase):
                     domains.append(domain)
                 network_data['connection_type'] = 'dns'
                 for lookup_type, resolved_ips in record["dns"].get("grouped", {}).items():
+                    reverse_lookup.update({ip: domain for ip in resolved_ips})
+                    network_data['objectid']['tag'] = f"{reverse_lookup.get(dest_ip, dest_ip)}" + \
+                        f"{f':{dest_port}' if dest_port else ''}"
+
                     data = deepcopy(network_data)
                     data['dns_details'] = {
                         'domain': domain,
                         'resolved_ips': resolved_ips,
                         'lookup_type': lookup_type
                     }
-                    self.ontology.add_result_part(Networking, data)
+                    self.ontology.add_result_part(NetworkConnection, data)
 
             elif record['event_type'] == 'alert':
                 if 'signature_id' not in record['alert'] or 'signature' not in record['alert']:
