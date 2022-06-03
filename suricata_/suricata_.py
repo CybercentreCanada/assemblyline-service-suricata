@@ -492,6 +492,7 @@ class Suricata(ServiceBase):
         if len(alerts) > 0:
             for signature_id, signature_details in signatures.items():
                 signature = signature_details['signature']
+                attributes = signature_details['attributes']
                 section = ResultSection(f'{signature_id}: {signature}')
                 heur_id = 3
                 if any(x in signature for x in self.config.get("sure_score")):
@@ -510,6 +511,7 @@ class Suricata(ServiceBase):
                 # Add a tag for the signature id and the message
                 section.add_tag('network.signature.signature_id', str(signature_id))
                 section.add_tag('network.signature.message', signature)
+                [section.add_tag('network.static.uri', attr['uri']) for attr in attributes]
                 # Tag malware_family
                 for malware_family in signature_details['malware_family']:
                     section.add_tag('attribution.family', malware_family)
@@ -520,7 +522,7 @@ class Suricata(ServiceBase):
                     data=dict(
                         name=signature_details['al_signature'],
                         type="SURICATA", malware_family=signature_details['malware_family'] or None,
-                        attributes=signature_details['attributes']))
+                        attributes=attributes))
 
             # Add the original Suricata output as a supplementary file in the result
             request.add_supplementary(os.path.join(self.working_directory, 'eve.json'), 'SuricataEventLog.json', 'json')
