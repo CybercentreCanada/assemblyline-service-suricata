@@ -516,7 +516,7 @@ class Suricata(ServiceBase):
                 # Add a tag for the signature id and the message
                 section.add_tag('network.signature.signature_id', str(signature_id))
                 section.add_tag('network.signature.message', signature)
-                [section.add_tag('network.static.uri', attr['uri']) for attr in attributes]
+                [section.add_tag('network.static.uri', attr['uri']) for attr in attributes if attr.get('uri')]
                 # Tag malware_family
                 for malware_family in signature_details['malware_family']:
                     section.add_tag('attribution.family', malware_family)
