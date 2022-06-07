@@ -278,15 +278,20 @@ class Suricata(ServiceBase):
                         proto = getservbyport(dest_port) if dest_port else 'http'
                     except OSError:
                         proto = 'http'
+
+                    attribute = {
+                        'source_ip': src_ip, 'source_port': src_port,
+                        'destination_ip': dest_ip, 'destination_port': dest_port,
+                    }
+                    if record.get('http'):
+                        # Only alerts containing HTTP details can provide URI-relevant information
+                        attribute.update({'uri': f"{proto}://{record['http']['hostname']+record['http']['url']}"})
+
                     signatures[signature_id] = {
                         "signature": signature,
                         "malware_family": record['alert'].get('metadata', {}).get('malware_family', []),
                         "al_signature": record['alert']['metadata'].get("al_signature", [None])[0],
-                        'attributes': [{
-                            'uri': f"{proto}://{record['http']['hostname']+record['http']['url']}",
-                            'source_ip': src_ip, 'source_port': src_port,
-                            'destination_ip': dest_ip, 'destination_port': dest_port,
-                        }]
+                        'attributes': [attribute]
                     }
                 alerts[signature_id].append(f"{timestamp} {src_ip}:{src_port} -> {dest_ip}:{dest_port}")
 
