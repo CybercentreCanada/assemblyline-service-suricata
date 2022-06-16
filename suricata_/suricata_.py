@@ -208,6 +208,13 @@ class Suricata(ServiceBase):
 
         ordered_records = []
         [ordered_records.extend(record) for record in event_types.values()]
+
+        # Populate reverse lookup map
+        for record in event_types['dns']:
+            domain = record['dns']['rrname']
+            for lookup_type, resolved_ips in record["dns"].get("grouped", {}).items():
+                reverse_lookup.update({ip: domain for ip in resolved_ips})
+
         for record in ordered_records:
             timestamp = dateparser.parse(record['timestamp']).isoformat(' ')
             src_ip = record.get('src_ip')
@@ -216,10 +223,18 @@ class Suricata(ServiceBase):
             dest_port = record.get('dest_port')
             proto = record.get('proto', 'TCP').lower()
             connection_info = f"{src_ip}:{src_port} -> {dest_ip}:{dest_port}"
+            direction = "outbound"
+
+            ext_hostname = reverse_lookup.get(dest_ip)
+            if not ext_hostname:
+                # Potentially dealing with an inbound response back to host
+                src_ip, src_port, dest_ip, dest_port = dest_ip, dest_port, src_ip, src_port
+                ext_hostname = reverse_lookup.get(dest_ip, dest_ip)
+                direction = "inbound"
 
             network_data = {
                 'objectid': {
-                    'tag': f"{reverse_lookup.get(dest_ip, dest_ip)}" + f"{f':{dest_port}' if dest_port else ''}",
+                    'tag': ext_hostname + f"{f':{dest_port}' if dest_port else ''}",
                     'time_observed': timestamp
                 },
                 'source_ip': src_ip,
@@ -227,7 +242,7 @@ class Suricata(ServiceBase):
                 'destination_ip': dest_ip,
                 'destination_port': dest_port,
                 'transport_layer_protocol': proto,
-                'direction': 'outbound',
+                'direction': direction,
             }
 
             if src_ip is not None and src_ip not in ips:
@@ -264,10 +279,6 @@ class Suricata(ServiceBase):
                     domains.append(domain)
                 network_data['connection_type'] = 'dns'
                 for lookup_type, resolved_ips in record["dns"].get("grouped", {}).items():
-                    reverse_lookup.update({ip: domain for ip in resolved_ips})
-                    network_data['objectid']['tag'] = f"{reverse_lookup.get(dest_ip, dest_ip)}" + \
-                        f"{f':{dest_port}' if dest_port else ''}"
-
                     data = deepcopy(network_data)
                     data['dns_details'] = {
                         'domain': domain,
@@ -292,7 +303,7 @@ class Suricata(ServiceBase):
                     except OSError:
                         proto = 'http'
 
-                    attribute = dict(source=oid_lookup[connection_info], domain=reverse_lookup.get(dest_ip))
+                    attribute = dict(source=oid_lookup[connection_info], domain=ext_hostname)
                     if record.get('http'):
                         # Only alerts containing HTTP details can provide URI-relevant information
                         attribute.update({'uri': f"{proto}://{record['http']['hostname']+record['http']['url']}"})
