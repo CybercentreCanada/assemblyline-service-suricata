@@ -228,8 +228,7 @@ class Suricata(ServiceBase):
             ext_hostname = reverse_lookup.get(dest_ip)
             if not ext_hostname:
                 # Potentially dealing with an inbound response back to host
-                src_ip, src_port, dest_ip, dest_port = dest_ip, dest_port, src_ip, src_port
-                ext_hostname = reverse_lookup.get(dest_ip, dest_ip)
+                ext_hostname = reverse_lookup.get(src_ip, src_ip)
                 direction = "inbound"
 
             network_data = {
