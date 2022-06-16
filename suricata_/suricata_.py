@@ -183,14 +183,23 @@ class Suricata(ServiceBase):
         extracted_files = {}
 
         reverse_lookup = {}
+        oid_lookup = {}
         event_types = {
             'dns': [],
             'http': [],
+            'netflow': [],
             'alert': [],
             'smpt': [],
             'tls': [],
             'fileinfo': [],
         }
+
+        def attach_network_connection(data: dict):
+            data['objectid']['ontology_id'] = NetworkConnection.get_oid(data)
+            self.ontology.add_result_part(NetworkConnection, data)
+            # Add ObjectID to lookup for signatures/alerts
+            oid_lookup[connection_info] = data['objectid']
+
         # Parse the json results of the service and organize them into certain categories
         for line in open(os.path.join(self.working_directory, 'eve.json')):
             record = json.loads(line)
@@ -198,7 +207,6 @@ class Suricata(ServiceBase):
                 event_types[record['event_type']].append(record)
 
         ordered_records = []
-        oid_lookup = dict()
         [ordered_records.extend(record) for record in event_types.values()]
         for record in ordered_records:
             timestamp = dateparser.parse(record['timestamp']).isoformat(' ')
@@ -246,11 +254,7 @@ class Suricata(ServiceBase):
                     'response_headers': {h['name'].replace('-', '_').lower(): h['value'] for h in http_details['response_headers']},
                     'response_status_code': http_details['status'],
                 }
-                network_data['objectid']['ontology_id'] = NetworkConnection.get_oid(network_data)
-                self.ontology.add_result_part(NetworkConnection, network_data)
-                # Add ObjectID to lookup for signatures/alerts
-                oid_lookup[connection_info] = network_data['objectid']
-
+                attach_network_connection(network_data)
 
             elif record['event_type'] == 'dns':
                 if 'rrname' not in record['dns']:
@@ -270,10 +274,10 @@ class Suricata(ServiceBase):
                         'resolved_ips': resolved_ips,
                         'lookup_type': lookup_type
                     }
-                    data['objectid']['ontology_id'] = NetworkConnection.get_oid(data)
-                    self.ontology.add_result_part(NetworkConnection, data)
-                    # Add ObjectID to lookup for signatures/alerts
-                    oid_lookup[connection_info] = data['objectid']
+                    attach_network_connection(data)
+            elif record['event_type'] == 'netflow':
+                network_data['connection_type'] = record['app_proto']
+                attach_network_connection(network_data)
 
             elif record['event_type'] == 'alert':
                 if 'signature_id' not in record['alert'] or 'signature' not in record['alert']:
