@@ -273,7 +273,7 @@ class Suricata(ServiceBase):
                     data['objectid']['ontology_id'] = NetworkConnection.get_oid(data)
                     self.ontology.add_result_part(NetworkConnection, data)
                     # Add ObjectID to lookup for signatures/alerts
-                    oid_lookup[connection_info] = data
+                    oid_lookup[connection_info] = data['objectid']
 
             elif record['event_type'] == 'alert':
                 if 'signature_id' not in record['alert'] or 'signature' not in record['alert']:
@@ -288,7 +288,7 @@ class Suricata(ServiceBase):
                     except OSError:
                         proto = 'http'
 
-                    attribute = dict(source=oid_lookup[connection_info]['objectid'], domain=reverse_lookup.get(dest_ip))
+                    attribute = dict(source=oid_lookup[connection_info], domain=reverse_lookup.get(dest_ip))
                     if record.get('http'):
                         # Only alerts containing HTTP details can provide URI-relevant information
                         attribute.update({'uri': f"{proto}://{record['http']['hostname']+record['http']['url']}"})
