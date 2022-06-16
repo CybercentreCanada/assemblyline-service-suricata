@@ -198,6 +198,7 @@ class Suricata(ServiceBase):
                 event_types[record['event_type']].append(record)
 
         ordered_records = []
+        oid_lookup = dict()
         [ordered_records.extend(record) for record in event_types.values()]
         for record in ordered_records:
             timestamp = dateparser.parse(record['timestamp']).isoformat(' ')
@@ -206,6 +207,7 @@ class Suricata(ServiceBase):
             dest_ip = record.get('dest_ip')
             dest_port = record.get('dest_port')
             proto = record.get('proto', 'TCP').lower()
+            connection_info = f"{src_ip}:{src_port} -> {dest_ip}:{dest_port}"
 
             network_data = {
                 'objectid': {
@@ -244,7 +246,11 @@ class Suricata(ServiceBase):
                     'response_headers': {h['name'].replace('-', '_').lower(): h['value'] for h in http_details['response_headers']},
                     'response_status_code': http_details['status'],
                 }
+                network_data['objectid']['ontology_id'] = NetworkConnection.get_oid(network_data)
                 self.ontology.add_result_part(NetworkConnection, network_data)
+                # Add ObjectID to lookup for signatures/alerts
+                oid_lookup[connection_info] = network_data['objectid']
+
 
             elif record['event_type'] == 'dns':
                 if 'rrname' not in record['dns']:
@@ -264,7 +270,10 @@ class Suricata(ServiceBase):
                         'resolved_ips': resolved_ips,
                         'lookup_type': lookup_type
                     }
+                    data['objectid']['ontology_id'] = NetworkConnection.get_oid(data)
                     self.ontology.add_result_part(NetworkConnection, data)
+                    # Add ObjectID to lookup for signatures/alerts
+                    oid_lookup[connection_info] = data
 
             elif record['event_type'] == 'alert':
                 if 'signature_id' not in record['alert'] or 'signature' not in record['alert']:
@@ -279,10 +288,7 @@ class Suricata(ServiceBase):
                     except OSError:
                         proto = 'http'
 
-                    attribute = {
-                        'source_ip': src_ip, 'source_port': src_port,
-                        'destination_ip': dest_ip, 'destination_port': dest_port,
-                    }
+                    attribute = dict(source=oid_lookup[connection_info]['objectid'], domain=reverse_lookup.get(dest_ip))
                     if record.get('http'):
                         # Only alerts containing HTTP details can provide URI-relevant information
                         attribute.update({'uri': f"{proto}://{record['http']['hostname']+record['http']['url']}"})
@@ -293,7 +299,7 @@ class Suricata(ServiceBase):
                         "al_signature": record['alert']['metadata'].get("al_signature", [None])[0],
                         'attributes': [attribute]
                     }
-                alerts[signature_id].append(f"{timestamp} {src_ip}:{src_port} -> {dest_ip}:{dest_port}")
+                alerts[signature_id].append(f"{timestamp} {connection_info}")
 
             elif record["event_type"] == "smtp":
                 # extract email metadata
