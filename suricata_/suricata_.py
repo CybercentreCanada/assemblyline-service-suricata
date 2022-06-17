@@ -195,10 +195,13 @@ class Suricata(ServiceBase):
         }
 
         def attach_network_connection(data: dict):
-            data['objectid']['ontology_id'] = NetworkConnection.get_oid(data)
-            self.ontology.add_result_part(NetworkConnection, data)
-            # Add ObjectID to lookup for signatures/alerts
-            oid_lookup[connection_info] = data['objectid']
+            oid = NetworkConnection.get_oid(data)
+            # Don't overwrite important netflows
+            if not self.ontology._result_parts.get(oid):
+                data['objectid']['ontology_id'] = oid
+                self.ontology.add_result_part(NetworkConnection, data)
+                # Add ObjectID to lookup for signatures/alerts
+                oid_lookup[connection_info] = data['objectid']
 
         # Parse the json results of the service and organize them into certain categories
         for line in open(os.path.join(self.working_directory, 'eve.json')):
@@ -305,7 +308,8 @@ class Suricata(ServiceBase):
                     attribute = dict(source=oid_lookup[connection_info], domain=ext_hostname)
                     if record.get('http'):
                         # Only alerts containing HTTP details can provide URI-relevant information
-                        attribute.update({'uri': f"{proto}://{record['http']['hostname']+record['http']['url']}"})
+                        hostname = reverse_lookup.get(record['http']['hostname'], record['http']['hostname'])
+                        attribute.update({'uri': f"{proto}://{hostname+record['http']['url']}"})
 
                     signatures[signature_id] = {
                         "signature": signature,
@@ -546,7 +550,7 @@ class Suricata(ServiceBase):
                     Signature,
                     data=dict(
                         name=signature_details['al_signature'],
-                        type="SURICATA", malware_family=signature_details['malware_family'] or None,
+                        type="SURICATA", malware_families=signature_details['malware_family'] or None,
                         attributes=attributes))
 
             # Add the original Suricata output as a supplementary file in the result
