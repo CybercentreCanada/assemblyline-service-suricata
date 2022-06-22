@@ -155,6 +155,9 @@ outputs:
             # custom allows additional http fields to be included in eve-log
             # the example below adds three additional fields when uncommented
             #custom: [Accept-Encoding, Accept-Language, Authorization]
+            # set this value to one and only one from {both, request, response}
+            # to dump all HTTP headers for every HTTP request and/or response
+            dump-all-headers: both
         - dns:
             # This configuration uses the new DNS logging format,
             # the old configuration is still available:
@@ -1081,8 +1084,8 @@ coredump:
 # This feature is currently only used by the reject* keywords.
 host-mode: auto
 
-# Number of packets preallocated per thread. The default is 1024. A higher number 
-# will make sure each CPU will be more easily kept busy, but may negatively 
+# Number of packets preallocated per thread. The default is 1024. A higher number
+# will make sure each CPU will be more easily kept busy, but may negatively
 # impact caching.
 #max-pending-packets: 1024
 
@@ -1120,7 +1123,7 @@ unix-command:
 
 # Magic file. The extension .mgc is added to the value here.
 #magic-file: /usr/share/file/magic
-#magic-file: 
+#magic-file:
 
 legacy:
   uricontent: enabled
