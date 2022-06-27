@@ -314,7 +314,7 @@ class Suricata(ServiceBase):
                         "al_signature": record['alert']['metadata'].get("al_signature", [None])[0],
                         'attributes': [attribute]
                     }
-                alerts[signature_id].append(f"{timestamp} {src_ip}:{src_port} -> {dest_ip}:{dest_port}")
+                alerts[signature_id].append((timestamp, src_ip, src_port, dest_ip, dest_port))
 
             elif record["event_type"] == "smtp":
                 # extract email metadata
@@ -356,7 +356,8 @@ class Suricata(ServiceBase):
                             self.working_directory, 'filestore', sha256_full[: 2].lower(),
                             sha256_full)}
         return dict(alerts=alerts, signatures=signatures, domains=domains, ips=ips, urls=urls,
-                    email_addresses=email_addresses, tls=tls_dict, extracted_files=extracted_files.values())
+                    email_addresses=email_addresses, tls=tls_dict, extracted_files=extracted_files.values(),
+                    reverse_lookup=reverse_lookup)
 
     def execute(self, request):
         file_path = request.file_path
@@ -409,7 +410,7 @@ class Suricata(ServiceBase):
         sys.stderr = old_stderr
         # NOTE: for now we will ignore content of mystdout and mystderr but we have them just in case...
 
-        alerts, signatures, domains, ips, urls, email_addresses, tls_dict, extracted_files = self.parse_suricata_output().values()
+        alerts, signatures, domains, ips, urls, email_addresses, tls_dict, extracted_files, reverse_lookup = self.parse_suricata_output().values()
 
         file_extracted_section = ResultSection("File(s) extracted by Suricata")
         # Parse the json results of the service
@@ -529,10 +530,18 @@ class Suricata(ServiceBase):
                 section.set_heuristic(heur_id)
                 if signature_details['al_signature']:
                     section.add_tag("file.rule.suricata", signature_details['al_signature'])
-                for flow in alerts[signature_id][:10]:
-                    section.add_line(flow)
+                for timestamp, src_ip, src_port, dest_ip, dest_port in alerts[signature_id][:10]:
+                    section.add_line(f"{timestamp} {src_ip}:{src_port} -> {dest_ip}:{dest_port}")
                 if len(alerts[signature_id]) > 10:
                     section.add_line(f'And {len(alerts[signature_id]) - 10} more flows')
+
+                # Tag IPs/Domains/URIs associated to signature
+                for flow in alerts[signature_id]:
+                    dest_ip = flow[3]
+                    section.add_tag('network.dynamic.ip', dest_ip)
+                    if dest_ip in reverse_lookup.keys():
+                        section.add_tag('network.dynamic.domain', reverse_lookup[dest_ip])
+                    [section.add_tag('network.dynamic.uri', uri) for uri in urls if dest_ip in uri or reverse_lookup.get(dest_ip) in uri]
 
                 # Add a tag for the signature id and the message
                 section.add_tag('network.signature.signature_id', str(signature_id))
