@@ -541,7 +541,8 @@ class Suricata(ServiceBase):
                     section.add_tag('network.dynamic.ip', dest_ip)
                     if dest_ip in reverse_lookup.keys():
                         section.add_tag('network.dynamic.domain', reverse_lookup[dest_ip])
-                    [section.add_tag('network.dynamic.uri', uri) for uri in urls if dest_ip in uri or reverse_lookup.get(dest_ip) in uri]
+                    [section.add_tag('network.dynamic.uri', uri) for uri in urls \
+                        if dest_ip in uri or (reverse_lookup.get(dest_ip) and reverse_lookup[dest_ip] in uri)]
 
                 # Add a tag for the signature id and the message
                 section.add_tag('network.signature.signature_id', str(signature_id))
