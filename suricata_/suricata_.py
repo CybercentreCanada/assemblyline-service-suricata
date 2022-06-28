@@ -282,13 +282,17 @@ class Suricata(ServiceBase):
                     domains.append(domain)
                 network_data['connection_type'] = 'dns'
                 for lookup_type, resolved_ips in record["dns"].get("grouped", {}).items():
-                    data = deepcopy(network_data)
-                    data['dns_details'] = {
-                        'domain': domain,
-                        'resolved_ips': resolved_ips,
-                        'lookup_type': lookup_type
-                    }
-                    attach_network_connection(data)
+                    if lookup_type == "A":
+                        data = deepcopy(network_data)
+                        data['dns_details'] = {
+                            'domain': domain,
+                            'resolved_ips': resolved_ips,
+                            'lookup_type': lookup_type
+                        }
+                        attach_network_connection(data)
+                    else:
+                        self.log.warning(
+                            f'Lookup type [{lookup_type}] found with values {resolved_ips}...')
             elif record['event_type'] == 'alert':
                 if 'signature_id' not in record['alert'] or 'signature' not in record['alert']:
                     continue
@@ -541,7 +545,7 @@ class Suricata(ServiceBase):
                     section.add_tag('network.dynamic.ip', dest_ip)
                     if dest_ip in reverse_lookup.keys():
                         section.add_tag('network.dynamic.domain', reverse_lookup[dest_ip])
-                    [section.add_tag('network.dynamic.uri', uri) for uri in urls \
+                    [section.add_tag('network.dynamic.uri', uri) for uri in urls
                         if dest_ip in uri or (reverse_lookup.get(dest_ip) and reverse_lookup[dest_ip] in uri)]
 
                 # Add a tag for the signature id and the message
