@@ -1,6 +1,7 @@
 import dateutil.parser as dateparser
 import json
 import os
+import regex
 import subprocess
 import suricatasc
 import sys
@@ -16,6 +17,7 @@ from typing import Dict, Any
 from assemblyline.common.exceptions import RecoverableError
 from assemblyline.common.str_utils import safe_str
 from assemblyline.odm.models.ontology.results import NetworkConnection, Signature
+from assemblyline.odm.base import DOMAIN_ONLY_REGEX
 from assemblyline_v4_service.common.base import ServiceBase
 from assemblyline_v4_service.common.request import MaxExtractedExceeded
 from assemblyline_v4_service.common.result import BODY_FORMAT, Result, ResultSection
@@ -266,19 +268,20 @@ class Suricata(ServiceBase):
                 network_data['connection_type'] = 'http'
                 http_details = record['http']
                 network_data['http_details'] = {
-                    'request_uri': http_details['hostname'] + http_details['url'],
+                    'request_uri': url,
                     'request_headers': {h['name'].replace('-', '_').lower(): h['value'] for h in http_details['request_headers']},
                     'request_method': http_details['http_method'].upper(),
                     'response_headers': {h['name'].replace('-', '_').lower(): h['value'] for h in http_details['response_headers']},
-                    'response_status_code': http_details['status'],
                 }
+                if http_details.get('status'):
+                    network_data['http_details'].update({'response_status_code': http_details['status']})
                 attach_network_connection(network_data)
 
             elif record['event_type'] == 'dns':
                 if 'rrname' not in record['dns']:
                     continue
                 domain = record['dns']['rrname']
-                if domain not in domains and domain not in ips:
+                if regex.match(DOMAIN_ONLY_REGEX, domain) and domain not in domains and domain not in ips:
                     domains.append(domain)
                 network_data['connection_type'] = 'dns'
                 for lookup_type, resolved_ips in record["dns"].get("grouped", {}).items():
