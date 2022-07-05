@@ -190,10 +190,10 @@ class Suricata(ServiceBase):
             'dns': [],
             'http': [],
             'netflow': [],
-            'alert': [],
-            'smpt': [],
+            'smtp': [],
             'tls': [],
             'fileinfo': [],
+            'alert': [],
         }
 
         def attach_network_connection(data: dict):
@@ -308,19 +308,23 @@ class Suricata(ServiceBase):
                         proto = getservbyport(dest_port) if dest_port else 'http'
                     except OSError:
                         proto = 'http'
-
-                    attribute = dict(source=oid_lookup[flow_id], domain=ext_hostname)
-                    if record.get('http'):
-                        # Only alerts containing HTTP details can provide URI-relevant information
-                        hostname = reverse_lookup.get(record['http']['hostname'], record['http']['hostname'])
-                        attribute.update({'uri': f"{proto}://{hostname+record['http']['url']}"})
-
                     signatures[signature_id] = {
                         "signature": signature,
                         "malware_family": record['alert'].get('metadata', {}).get('malware_family', []),
                         "al_signature": record['alert']['metadata'].get("al_signature", [None])[0],
-                        'attributes': [attribute]
+                        'attributes': []
                     }
+
+                    if any(record.get(event_type) for event_type in ['http', 'dns']):
+                        attribute = dict(source=oid_lookup[flow_id], domain=ext_hostname)
+                        if record.get('http'):
+                            # Only alerts containing HTTP details can provide URI-relevant information
+                            hostname = reverse_lookup.get(record['http']['hostname'], record['http']['hostname'])
+                            attribute.update({'uri': f"{proto}://{hostname+record['http']['url']}"})
+
+                        if attribute:
+                            signatures[signature_id].update({'attributes': [attribute]})
+
                 alerts[signature_id].append((timestamp, src_ip, src_port, dest_ip, dest_port))
 
             elif record["event_type"] == "smtp":
