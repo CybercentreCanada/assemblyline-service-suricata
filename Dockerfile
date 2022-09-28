@@ -2,7 +2,7 @@ ARG branch=latest
 FROM cccs/assemblyline-v4-service-base:$branch AS base
 
 ENV SERVICE_PATH suricata_.suricata_.Suricata
-ENV SURICATA_VERSION 6.0.5
+ENV SURICATA_VERSION 6.0.8
 
 USER root
 
@@ -50,8 +50,8 @@ RUN ldconfig /usr/local/lib
 
 # Install suricata pip package
 ENV PATH="/build/bin:$PATH"
-ENV TMPDIR=/tmp/suricata-${SURICATA_VERSION}
-RUN pip install --no-cache-dir --user /tmp/suricata-${SURICATA_VERSION}/python
+RUN make install -C /tmp/suricata-${SURICATA_VERSION}/python install-exec-local
+
 
 # Install stripe
 COPY suricata_/stripe/* /tmp/stripe/
@@ -74,6 +74,7 @@ COPY --from=build /var/log/suricata/ /var/log/suricata/
 COPY --from=build /usr/lib /usr/lib
 
 ENV LD_LIBRARY_PATH=/usr/local/lib
+ENV PYTHONPATH="/usr/local/lib/suricata/python:$PYTHONPATH"
 # Create all suricata directories and set permissions
 RUN mkdir -p /mount/updates && chown -R assemblyline /mount/updates
 RUN mkdir -p /etc/suricata && chown -R assemblyline /etc/suricata
