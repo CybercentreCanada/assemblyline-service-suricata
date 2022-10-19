@@ -147,7 +147,7 @@ class Suricata(ServiceBase):
 
     # Retry with exponential backoff until we can actually connect to the Suricata socket
     @retry(retry_on_result=lambda x: x is False, wait_exponential_multiplier=1000, wait_exponential_max=10000,
-           stop_max_delay=30000, stop_max_attempt_number=3)
+           stop_max_delay=30000)
     def suricata_running_retry(self):
         return self.suricata_running()
 
