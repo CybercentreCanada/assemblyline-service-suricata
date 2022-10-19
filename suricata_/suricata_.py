@@ -2,6 +2,7 @@ import dateutil.parser as dateparser
 import json
 import os
 import regex
+import signal
 import subprocess
 import suricatasc
 import sys
@@ -12,7 +13,6 @@ from copy import deepcopy
 from io import StringIO
 from retrying import retry, RetryError
 from socket import getservbyport
-from typing import Dict, Any
 
 from assemblyline.common.exceptions import RecoverableError
 from assemblyline.common.str_utils import safe_str
@@ -147,7 +147,7 @@ class Suricata(ServiceBase):
 
     # Retry with exponential backoff until we can actually connect to the Suricata socket
     @retry(retry_on_result=lambda x: x is False, wait_exponential_multiplier=1000, wait_exponential_max=10000,
-           stop_max_delay=120000)
+           stop_max_delay=120000, tries=3)
     def suricata_running_retry(self):
         return self.suricata_running()
 
@@ -172,7 +172,7 @@ class Suricata(ServiceBase):
         self.suricata_sc = suricatasc.SuricataSC(self.suricata_socket)
 
         if not self.suricata_running_retry():
-            raise Exception('Suricata could not be started.')
+            raise RecoverableError('Suricata could not be started.')
 
     def parse_suricata_output(self):
         alerts = {}
@@ -579,3 +579,10 @@ class Suricata(ServiceBase):
             request.add_supplementary(os.path.join(self.working_directory, 'stats.log'), 'stats.log', 'log')
 
         request.result = result
+
+    def _handle_execute_failure(self, exception, stack_info) -> None:
+        super(Suricata, self)._handle_execute_failure(exception, stack_info)
+
+        if isinstance(exception, RecoverableError):
+            # If Recoverable exception, then trigger instance to shutdown
+            os.kill(os.getpid(), signal.SIGUSR1)
