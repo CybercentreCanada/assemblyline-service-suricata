@@ -15,6 +15,7 @@ disable_cache: false
 enabled: true
 is_external: false
 licence_count: 0
+uses_temp_submission_data: true
 
 config:
   sure_score: ["MALWARE", "TROJAN", "CURRENT_EVENTS", "CnC", "Checkin"]

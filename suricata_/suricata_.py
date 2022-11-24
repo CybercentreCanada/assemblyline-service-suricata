@@ -174,7 +174,7 @@ class Suricata(ServiceBase):
         if not self.suricata_running_retry():
             raise Exception('Suricata could not be started.')
 
-    def parse_suricata_output(self):
+    def parse_suricata_output(self, request):
         alerts = {}
         signatures = {}
         domains = []
@@ -183,6 +183,7 @@ class Suricata(ServiceBase):
         email_addresses = []
         tls_dict = {}
         extracted_files = {}
+        request.temp_submission_data.setdefault('url_headers', {})
 
         reverse_lookup = {}
         oid_lookup = {}
@@ -273,6 +274,8 @@ class Suricata(ServiceBase):
                     'request_method': http_details['http_method'].upper(),
                     'response_headers': {h['name'].replace('-', '_').lower(): h['value'] for h in http_details['response_headers']},
                 }
+                request.temp_submission_data['url_headers'].update({url: {h['name']: h['value']
+                                                                          for h in http_details['request_headers']}})
                 if http_details.get('status'):
                     network_data['http_details'].update({'response_status_code': http_details['status']})
                 attach_network_connection(network_data)
@@ -421,7 +424,8 @@ class Suricata(ServiceBase):
         sys.stderr = old_stderr
         # NOTE: for now we will ignore content of mystdout and mystderr but we have them just in case...
 
-        alerts, signatures, domains, ips, urls, email_addresses, tls_dict, extracted_files, reverse_lookup = self.parse_suricata_output().values()
+        alerts, signatures, domains, ips, urls, email_addresses, tls_dict, extracted_files, reverse_lookup = \
+            self.parse_suricata_output(request).values()
 
         file_extracted_section = ResultSection("File(s) extracted by Suricata")
         # Parse the json results of the service
