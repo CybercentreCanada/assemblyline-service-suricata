@@ -205,7 +205,7 @@ class Suricata(ServiceBase):
                 self.ontology.add_result_part(NetworkConnection, data)
 
                 # Add ObjectID to lookup for signatures/alerts
-                oid_lookup[flow_id] = data['objectid']
+                oid_lookup.setdefault(flow_id, []).append(data['objectid'])
 
         # Parse the json results of the service and organize them into certain categories
         for line in open(os.path.join(self.working_directory, 'eve.json')):
@@ -297,8 +297,9 @@ class Suricata(ServiceBase):
                         }
                         attach_network_connection(data)
                     else:
-                        self.log.warning(
-                            f'Lookup type [{lookup_type}] found with values {resolved_ips}...')
+                        self.log.warning(f'Lookup type [{lookup_type}] found with values {resolved_ips}...')
+            elif record['event_type'] == 'netflow':
+                attach_network_connection(network_data)
             elif record['event_type'] == 'alert':
                 if 'signature_id' not in record['alert'] or 'signature' not in record['alert']:
                     continue
@@ -318,15 +319,18 @@ class Suricata(ServiceBase):
                         'attributes': []
                     }
 
-                    if any(record.get(event_type) for event_type in ['http', 'dns']):
-                        attribute = dict(source=oid_lookup[flow_id], domain=ext_hostname)
-                        if record.get('http'):
-                            # Only alerts containing HTTP details can provide URI-relevant information
-                            hostname = reverse_lookup.get(record['http']['hostname'], record['http']['hostname'])
-                            attribute.update({'uri': f"{proto}://{hostname+record['http']['url']}"})
+                    if any(record.get(event_type) for event_type in ['http', 'dns', 'flow']):
+                        attributes = []
+                        for source in oid_lookup[flow_id]:
+                            attribute = dict(source=source, domain=ext_hostname)
+                            if record.get('http'):
+                                # Only alerts containing HTTP details can provide URI-relevant information
+                                hostname = reverse_lookup.get(record['http']['hostname'], record['http']['hostname'])
+                                attribute.update({'uri': f"{proto}://{hostname+record['http']['url']}"})
+                            attributes.append(attribute)
 
-                        if attribute:
-                            signatures[signature_id].update({'attributes': [attribute]})
+                        if attributes:
+                            signatures[signature_id].update({'attributes': attributes})
 
                 alerts[signature_id].append((timestamp, src_ip, src_port, dest_ip, dest_port))
 
@@ -365,7 +369,8 @@ class Suricata(ServiceBase):
                 if sha256_full not in extracted_files.keys():
                     sha256 = f"{sha256_full[:12]}.data"
                     extracted_files['sha256_full'] = {
-                        'sha256': sha256, 'filename': os.path.basename(record["fileinfo"].get('filename', sha256)),
+                        'sha256': sha256,
+                        'filename': os.path.basename(record["fileinfo"].get('filename', sha256)) or sha256,
                         'extracted_file_path': os.path.join(
                             self.working_directory, 'filestore', sha256_full[: 2].lower(),
                             sha256_full)}
@@ -456,6 +461,9 @@ class Suricata(ServiceBase):
         if domains:
             domain_section = ResultSection("Domains", parent=root_section)
             for domain in domains:
+                if not regex.match(DOMAIN_ONLY_REGEX, domain):
+                    ips.append(domain)
+                    continue
                 domain_section.add_line(domain)
                 domain_section.add_tag('network.dynamic.domain', domain)
         if ips:
@@ -575,8 +583,8 @@ class Suricata(ServiceBase):
                         type="SURICATA", malware_families=signature_details['malware_family'] or None,
                         attributes=attributes))
 
-            # Add the original Suricata output as a supplementary file in the result
-            request.add_supplementary(os.path.join(self.working_directory, 'eve.json'), 'SuricataEventLog.json', 'json')
+        # Add the original Suricata output as a supplementary file in the result
+        request.add_supplementary(os.path.join(self.working_directory, 'eve.json'), 'SuricataEventLog.json', 'json')
 
         # Add the stats.log to the result, which can be used to determine service success
         if os.path.exists(os.path.join(self.working_directory, 'stats.log')):
