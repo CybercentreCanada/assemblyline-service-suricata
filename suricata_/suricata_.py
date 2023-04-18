@@ -263,7 +263,19 @@ class Suricata(ServiceBase):
                 domain = record['http']['hostname']
                 if domain not in domains and domain not in ips:
                     domains.append(domain)
-                url = "http://" + domain + record['http']['url']
+
+                protocol = 'https' if record['http'].get('http_port') == 443 else 'http'
+                url_meta = record['http']['url']
+                if url_meta.startswith('/'):
+                    # Assume this is a path
+                    url = f"{protocol}://" + domain + record['http']['url']
+                elif url_meta.startswith('http'):
+                    # Assume this is a URL with the protocol
+                    url = url_meta
+                else:
+                    # Assume this ia a URL without the protocol, default to http
+                    url = f"{protocol}://" + url_meta
+
                 if url not in urls:
                     urls.append(url)
                 network_data['connection_type'] = 'http'
