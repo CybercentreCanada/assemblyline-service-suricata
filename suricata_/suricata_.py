@@ -263,7 +263,19 @@ class Suricata(ServiceBase):
                 domain = record['http']['hostname']
                 if domain not in domains and domain not in ips:
                     domains.append(domain)
-                url = "http://" + domain + record['http']['url']
+
+                protocol = 'https' if record['http'].get('http_port') == 443 else 'http'
+                url_meta = record['http']['url']
+                if url_meta.startswith('/'):
+                    # Assume this is a path
+                    url = f"{protocol}://" + domain + record['http']['url']
+                elif url_meta.startswith('http'):
+                    # Assume this is a URL with the protocol
+                    url = url_meta
+                else:
+                    # Assume this ia a URL without the protocol, default to http
+                    url = f"{protocol}://" + url_meta
+
                 if url not in urls:
                     urls.append(url)
                 network_data['connection_type'] = 'http'
@@ -323,7 +335,7 @@ class Suricata(ServiceBase):
                         attributes = []
                         for source in oid_lookup[flow_id]:
                             attribute = dict(source=source, domain=ext_hostname)
-                            if record.get('http'):
+                            if record.get('http') and record['http'].get('hostname'):
                                 # Only alerts containing HTTP details can provide URI-relevant information
                                 hostname = reverse_lookup.get(record['http']['hostname'], record['http']['hostname'])
                                 attribute.update({'uri': f"{proto}://{hostname+record['http']['url']}"})
