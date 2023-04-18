@@ -335,7 +335,7 @@ class Suricata(ServiceBase):
                         attributes = []
                         for source in oid_lookup[flow_id]:
                             attribute = dict(source=source, domain=ext_hostname)
-                            if record.get('http'):
+                            if record.get('http') and record['http'].get('hostname'):
                                 # Only alerts containing HTTP details can provide URI-relevant information
                                 hostname = reverse_lookup.get(record['http']['hostname'], record['http']['hostname'])
                                 attribute.update({'uri': f"{proto}://{hostname+record['http']['url']}"})
