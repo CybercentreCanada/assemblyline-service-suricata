@@ -17,7 +17,7 @@ from typing import Dict, Any
 from assemblyline.common.exceptions import RecoverableError
 from assemblyline.common.str_utils import safe_str
 from assemblyline.odm.models.ontology.results import NetworkConnection, Signature
-from assemblyline.odm.base import DOMAIN_ONLY_REGEX
+from assemblyline.odm.base import DOMAIN_ONLY_REGEX, IP_ONLY_REGEX
 from assemblyline_v4_service.common.base import ServiceBase
 from assemblyline_v4_service.common.request import MaxExtractedExceeded
 from assemblyline_v4_service.common.result import BODY_FORMAT, Result, ResultSection
@@ -199,13 +199,13 @@ class Suricata(ServiceBase):
 
         def attach_network_connection(data: dict):
             oid = NetworkConnection.get_oid(data)
+            data['objectid']['ontology_id'] = oid
             # Don't overwrite important netflows
             if not self.ontology._result_parts.get(oid):
-                data['objectid']['ontology_id'] = oid
                 self.ontology.add_result_part(NetworkConnection, data)
 
-                # Add ObjectID to lookup for signatures/alerts
-                oid_lookup.setdefault(flow_id, []).append(data['objectid'])
+            # Add ObjectID to lookup for signatures/alerts
+            oid_lookup.setdefault(flow_id, []).append(data['objectid'])
 
         # Parse the json results of the service and organize them into certain categories
         for line in open(os.path.join(self.working_directory, 'eve.json')):
@@ -263,7 +263,19 @@ class Suricata(ServiceBase):
                 domain = record['http']['hostname']
                 if domain not in domains and domain not in ips:
                     domains.append(domain)
-                url = "http://" + domain + record['http']['url']
+
+                protocol = 'https' if record['http'].get('http_port') == 443 else 'http'
+                url_meta = record['http']['url']
+                if url_meta.startswith('/'):
+                    # Assume this is a path
+                    url = f"{protocol}://" + domain + record['http']['url']
+                elif url_meta.startswith('http'):
+                    # Assume this is a URL with the protocol
+                    url = url_meta
+                else:
+                    # Assume this ia a URL without the protocol, default to http
+                    url = f"{protocol}://" + url_meta
+
                 if url not in urls:
                     urls.append(url)
                 network_data['connection_type'] = 'http'
@@ -322,8 +334,10 @@ class Suricata(ServiceBase):
                     if any(record.get(event_type) for event_type in ['http', 'dns', 'flow']):
                         attributes = []
                         for source in oid_lookup[flow_id]:
-                            attribute = dict(source=source, domain=ext_hostname)
-                            if record.get('http'):
+                            attribute = dict(source=source)
+                            if not regex.match(IP_ONLY_REGEX, ext_hostname):
+                                attribute['domain'] = ext_hostname
+                            if record.get('http') and record['http'].get('hostname'):
                                 # Only alerts containing HTTP details can provide URI-relevant information
                                 hostname = reverse_lookup.get(record['http']['hostname'], record['http']['hostname'])
                                 attribute.update({'uri': f"{proto}://{hostname+record['http']['url']}"})
