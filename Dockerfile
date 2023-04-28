@@ -6,7 +6,7 @@ ENV SURICATA_VERSION 6.0.11
 
 USER root
 
-RUN echo 'deb http://deb.debian.org/debian stretch-backports main' >> /etc/apt/sources.list
+RUN echo 'deb http://deb.debian.org/debian buster-backports main' >> /etc/apt/sources.list
 
 # Install APT dependancies
 RUN apt-get update && apt-get install -y wget curl \
