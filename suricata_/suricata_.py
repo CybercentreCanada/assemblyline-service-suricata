@@ -495,6 +495,8 @@ class Suricata(ServiceBase):
         if urls:
             url_section = ResultSection("URLs", parent=root_section)
             for url in urls:
+                if url.startswith('https'):
+                    url = url.replace(':443', '', 1)
                 url_section.add_line(url)
                 url_section.add_tag('network.dynamic.uri', url)
         if email_addresses:
