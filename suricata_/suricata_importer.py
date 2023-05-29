@@ -1,13 +1,11 @@
-from copy import deepcopy
 import logging
 import os
-
+from copy import deepcopy
 from typing import List
-
-from suricata.update.rule import Rule, parse_file
 
 from assemblyline.common import forge
 from assemblyline.odm.models.signature import Signature
+from suricata.update.rule import Rule, parse_file
 
 UPDATE_CONFIGURATION_PATH = os.environ.get('UPDATE_CONFIGURATION_PATH', None)
 

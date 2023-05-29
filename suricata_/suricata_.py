@@ -1,26 +1,25 @@
-import dateutil.parser as dateparser
 import json
 import os
-import regex
 import subprocess
-import suricatasc
 import sys
 import time
-import yaml
-
 from copy import deepcopy
 from io import StringIO
-from retrying import retry, RetryError
 from socket import getservbyport
-from typing import Dict, Any
+from typing import Any, Dict
 
+import dateutil.parser as dateparser
+import regex
+import suricatasc
+import yaml
 from assemblyline.common.exceptions import RecoverableError
 from assemblyline.common.str_utils import safe_str
-from assemblyline.odm.models.ontology.results import NetworkConnection, Signature
 from assemblyline.odm.base import DOMAIN_ONLY_REGEX, IP_ONLY_REGEX
+from assemblyline.odm.models.ontology.results import NetworkConnection, Signature
 from assemblyline_v4_service.common.base import ServiceBase
 from assemblyline_v4_service.common.request import MaxExtractedExceeded
 from assemblyline_v4_service.common.result import BODY_FORMAT, Result, ResultSection
+from retrying import RetryError, retry
 
 SURICATA_BIN = "/usr/local/bin/suricata"
 
