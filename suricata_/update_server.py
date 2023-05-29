@@ -1,6 +1,5 @@
 from assemblyline.common import forge
 from assemblyline_v4_service.updater.updater import ServiceUpdater
-
 from suricata_.suricata_importer import SuricataImporter
 
 classification = forge.get_classification()
