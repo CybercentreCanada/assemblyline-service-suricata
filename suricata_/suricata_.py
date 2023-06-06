@@ -14,6 +14,7 @@ import suricatasc
 import yaml
 from assemblyline.common.exceptions import RecoverableError
 from assemblyline.common.str_utils import safe_str
+from assemblyline.common.forge import get_classification
 from assemblyline.odm.base import DOMAIN_ONLY_REGEX, IP_ONLY_REGEX
 from assemblyline.odm.models.ontology.results import NetworkConnection, Signature
 from assemblyline_v4_service.common.base import ServiceBase
@@ -22,7 +23,7 @@ from assemblyline_v4_service.common.result import BODY_FORMAT, Result, ResultSec
 from retrying import RetryError, retry
 
 SURICATA_BIN = "/usr/local/bin/suricata"
-
+Classification = get_classification()
 
 class Suricata(ServiceBase):
     def __init__(self, config=None):
@@ -327,6 +328,7 @@ class Suricata(ServiceBase):
                         "signature": signature,
                         "malware_family": record['alert'].get('metadata', {}).get('malware_family', []),
                         "al_signature": record['alert']['metadata'].get("al_signature", [None])[0],
+                        'classification': record['alert']['metadata'].get('classification', [Classification.UNRESTRICTED])[0],
                         'attributes': []
                     }
 
@@ -558,7 +560,8 @@ class Suricata(ServiceBase):
             for signature_id, signature_details in signatures.items():
                 signature = signature_details['signature']
                 attributes = signature_details['attributes']
-                section = ResultSection(f'{signature_id}: {signature}')
+                section = ResultSection(f'{signature_id}: {signature}',
+                                        classification=Classification.max_classification(signature_details['classification'], request.task.min_classification))
                 heur_id = 3
                 if any(x in signature for x in self.config.get("sure_score")):
                     heur_id = 1
