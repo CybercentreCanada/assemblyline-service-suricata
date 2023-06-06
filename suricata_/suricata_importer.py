@@ -33,14 +33,16 @@ class SuricataImporter:
         for signature in signatures:
             name = signature.msg or signature.sid
             status = "DEPLOYED" if signature.enabled else "DISABLED"
+            classification = default_classification or self.classification.UNRESTRICTED
 
             # Update metadata to include reference to signature in Assemblyline
             orig_meta, new_meta = signature.metadata, deepcopy(signature.metadata)
             new_meta.append(f"al_signature {source}.{name}")
+            new_meta.append(f"classification {classification}")
             signature.raw = signature.raw.replace(", ".join(orig_meta), ", ".join(new_meta))
 
             sig = Signature(dict(
-                classification=default_classification or self.classification.UNRESTRICTED,
+                classification=classification,
                 data=signature.raw,
                 name=name,
                 order=order,
