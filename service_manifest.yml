@@ -67,5 +67,11 @@ update_config:
     - name: emt
       pattern: .*\.rules
       uri: https://rules.emergingthreats.net/open/suricata/emerging.rules.tar.gz
+    - name: snort3_community
+      pattern: .*\.rules
+      uri: https://www.snort.org/downloads/community/snort3-community-rules.tar.gz
+    - name: urlhaus
+      pattern: .*\.rules
+      uri: https://urlhaus.abuse.ch/downloads/urlhaus_suricata.tar.gz
   update_interval_seconds: 21600 # Quarter-day (every 6 hours)
   wait_for_update: true
