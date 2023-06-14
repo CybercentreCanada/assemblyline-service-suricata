@@ -18,5 +18,5 @@ class SuricataUpdateServer(ServiceUpdater):
 
 
 if __name__ == '__main__':
-    with SuricataUpdateServer(default_pattern="*.rules") as server:
+    with SuricataUpdateServer(default_pattern=".*\.rules") as server:
         server.serve_forever()
