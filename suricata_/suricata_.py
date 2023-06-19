@@ -13,8 +13,8 @@ import regex
 import suricatasc
 import yaml
 from assemblyline.common.exceptions import RecoverableError
-from assemblyline.common.str_utils import safe_str
 from assemblyline.common.forge import get_classification
+from assemblyline.common.str_utils import safe_str
 from assemblyline.odm.base import DOMAIN_ONLY_REGEX, IP_ONLY_REGEX
 from assemblyline.odm.models.ontology.results import NetworkConnection, Signature
 from assemblyline_v4_service.common.base import ServiceBase
@@ -24,6 +24,7 @@ from retrying import RetryError, retry
 
 SURICATA_BIN = "/usr/local/bin/suricata"
 Classification = get_classification()
+
 
 class Suricata(ServiceBase):
     def __init__(self, config=None):
@@ -70,13 +71,15 @@ class Suricata(ServiceBase):
         # Get rule stats
         ret = self.suricata_sc.send_command("ruleset-stats")
         if ret:
-            for ruleset in ret.get('message'):
+            for ruleset in ret.get("message"):
                 self.log.info(f"Ruleset {ruleset['id']}: {ruleset['rules_loaded']} rules loaded")
-                if ruleset['rules_failed'] and ruleset['rules_loaded'] == 0:
+                if ruleset["rules_failed"] and ruleset["rules_loaded"] == 0:
                     self.log.error(f"Ruleset {ruleset['id']}: {ruleset['rules_failed']} rules failed to load")
                 else:
-                    self.log.warning(f"Ruleset {ruleset['id']}: {ruleset['rules_failed']} rules failed to load."
-                                     "This can be due to duplication of rules among muliple rulesets being loaded.")
+                    self.log.warning(
+                        f"Ruleset {ruleset['id']}: {ruleset['rules_failed']} rules failed to load."
+                        "This can be due to duplication of rules among muliple rulesets being loaded."
+                    )
 
     def get_suricata_version(self):
         return safe_str(subprocess.check_output(["suricata", "-V"]).strip().replace(b"This is Suricata version ", b""))
@@ -86,7 +89,7 @@ class Suricata(ServiceBase):
         Return the version of suricata used for processing
         :return:
         """
-        return f'{self.get_suricata_version()}.r{self.rules_hash}'
+        return f"{self.get_suricata_version()}.r{self.rules_hash}"
 
     # When we're shutting down, kill the Suricata child process as well
     def stop(self):
@@ -103,7 +106,7 @@ class Suricata(ServiceBase):
 
     # Reapply our service configuration to the Suricata yaml configuration
     def replace_suricata_config(self):
-        source_path = os.path.join(os.getcwd(), 'suricata_', 'conf', 'suricata.yaml')
+        source_path = os.path.join(os.getcwd(), "suricata_", "conf", "suricata.yaml")
         dest_path = self.suricata_yaml
         # home_net = re.sub(r"([/\[\]])", r"\\\1", self.home_net)
         home_net = self.home_net
@@ -146,23 +149,30 @@ class Suricata(ServiceBase):
         return True
 
     # Retry with exponential backoff until we can actually connect to the Suricata socket
-    @retry(retry_on_result=lambda x: x is False, wait_exponential_multiplier=1000, wait_exponential_max=10000,
-           stop_max_delay=120000)
+    @retry(
+        retry_on_result=lambda x: x is False,
+        wait_exponential_multiplier=1000,
+        wait_exponential_max=10000,
+        stop_max_delay=120000,
+    )
     def suricata_running_retry(self):
         return self.suricata_running()
 
     # Launch Suricata using a UID socket
     def launch_or_load_suricata(self):
-        self.suricata_socket = os.path.join(self.run_dir, 'suricata.socket')
+        self.suricata_socket = os.path.join(self.run_dir, "suricata.socket")
 
         if not os.path.exists(self.suricata_socket):
             command = [
                 SURICATA_BIN,
                 "-vvvv",  # Useful for debugging
-                "-c", self.suricata_yaml,
+                "-c",
+                self.suricata_yaml,
                 f"--unix-socket={self.suricata_socket}",
-                "--pidfile", f"{self.run_dir}/suricata.pid",
-                "--set", f"logging.outputs.1.file.filename={self.suricata_log}",
+                "--pidfile",
+                f"{self.run_dir}/suricata.pid",
+                "--set",
+                f"logging.outputs.1.file.filename={self.suricata_log}",
             ]
 
             self.log.info(f"Launching Suricata: {' '.join(command)}")
@@ -172,7 +182,7 @@ class Suricata(ServiceBase):
         self.suricata_sc = suricatasc.SuricataSC(self.suricata_socket)
 
         if not self.suricata_running_retry():
-            raise Exception('Suricata could not be started.')
+            raise Exception("Suricata could not be started.")
 
     def parse_suricata_output(self, request):
         alerts = {}
@@ -183,52 +193,52 @@ class Suricata(ServiceBase):
         email_addresses = []
         tls_dict = {}
         extracted_files = {}
-        request.temp_submission_data.setdefault('url_headers', {})
+        request.temp_submission_data.setdefault("url_headers", {})
 
         reverse_lookup = {}
         oid_lookup = {}
         event_types = {
-            'dns': [],
-            'http': [],
-            'netflow': [],
-            'smtp': [],
-            'tls': [],
-            'fileinfo': [],
-            'alert': [],
+            "dns": [],
+            "http": [],
+            "netflow": [],
+            "smtp": [],
+            "tls": [],
+            "fileinfo": [],
+            "alert": [],
         }
 
         def attach_network_connection(data: dict):
             oid = NetworkConnection.get_oid(data)
-            data['objectid']['ontology_id'] = oid
+            data["objectid"]["ontology_id"] = oid
             # Don't overwrite important netflows
             if not self.ontology._result_parts.get(oid):
                 self.ontology.add_result_part(NetworkConnection, data)
 
             # Add ObjectID to lookup for signatures/alerts
-            oid_lookup.setdefault(flow_id, []).append(data['objectid'])
+            oid_lookup.setdefault(flow_id, []).append(data["objectid"])
 
         # Parse the json results of the service and organize them into certain categories
-        for line in open(os.path.join(self.working_directory, 'eve.json')):
+        for line in open(os.path.join(self.working_directory, "eve.json")):
             record = json.loads(line)
-            if record['event_type'] in event_types.keys():
-                event_types[record['event_type']].append(record)
+            if record["event_type"] in event_types.keys():
+                event_types[record["event_type"]].append(record)
 
         ordered_records = []
         [ordered_records.extend(record) for record in event_types.values()]
 
         # Populate reverse lookup map
-        for record in event_types['dns']:
-            domain = record['dns']['rrname']
+        for record in event_types["dns"]:
+            domain = record["dns"]["rrname"]
             for lookup_type, resolved_ips in record["dns"].get("grouped", {}).items():
                 reverse_lookup.update({ip: domain for ip in resolved_ips})
 
         for record in ordered_records:
-            timestamp = dateparser.parse(record['timestamp']).isoformat(' ')
-            src_ip = record.get('src_ip')
-            src_port = record.get('src_port')
-            dest_ip = record.get('dest_ip')
-            dest_port = record.get('dest_port')
-            proto = record.get('proto', 'TCP').lower()
+            timestamp = dateparser.parse(record["timestamp"]).isoformat(" ")
+            src_ip = record.get("src_ip")
+            src_port = record.get("src_port")
+            dest_ip = record.get("dest_ip")
+            dest_port = record.get("dest_port")
+            proto = record.get("proto", "TCP").lower()
             direction = "outbound"
             flow_id = record["flow_id"]
 
@@ -239,16 +249,16 @@ class Suricata(ServiceBase):
                 direction = "inbound"
 
             network_data = {
-                'objectid': {
-                    'tag': ext_hostname + f"{f':{dest_port}' if dest_port else ''}",
-                    'time_observed': timestamp
+                "objectid": {
+                    "tag": ext_hostname + f"{f':{dest_port}' if dest_port else ''}",
+                    "time_observed": timestamp,
                 },
-                'source_ip': src_ip,
-                'source_port': src_port,
-                'destination_ip': dest_ip,
-                'destination_port': dest_port,
-                'transport_layer_protocol': proto,
-                'direction': direction,
+                "source_ip": src_ip,
+                "source_port": src_port,
+                "destination_ip": dest_ip,
+                "destination_port": dest_port,
+                "transport_layer_protocol": proto,
+                "direction": direction,
             }
 
             if src_ip is not None and src_ip not in ips:
@@ -256,20 +266,20 @@ class Suricata(ServiceBase):
             if dest_ip is not None and dest_ip not in ips:
                 ips.append(dest_ip)
 
-            if record['event_type'] == 'http':
-                if 'hostname' not in record['http'] or 'url' not in record['http']:
+            if record["event_type"] == "http":
+                if "hostname" not in record["http"] or "url" not in record["http"]:
                     continue
 
-                domain = record['http']['hostname']
+                domain = record["http"]["hostname"]
                 if domain not in domains and domain not in ips:
                     domains.append(domain)
 
-                protocol = 'https' if record['http'].get('http_port') == 443 else 'http'
-                url_meta = record['http']['url']
-                if url_meta.startswith('/'):
+                protocol = "https" if record["http"].get("http_port") == 443 else "http"
+                url_meta = record["http"]["url"]
+                if url_meta.startswith("/"):
                     # Assume this is a path
-                    url = f"{protocol}://" + domain + record['http']['url']
-                elif url_meta.startswith('http'):
+                    url = f"{protocol}://" + domain + record["http"]["url"]
+                elif url_meta.startswith("http"):
                     # Assume this is a URL with the protocol
                     url = url_meta
                 else:
@@ -278,74 +288,81 @@ class Suricata(ServiceBase):
 
                 if url not in urls:
                     urls.append(url)
-                network_data['connection_type'] = 'http'
-                http_details = record['http']
-                network_data['http_details'] = {
-                    'request_uri': url,
-                    'request_headers': {h['name'].replace('-', '_').lower(): h['value'] for h in http_details['request_headers']},
-                    'request_method': http_details['http_method'].upper(),
-                    'response_headers': {h['name'].replace('-', '_').lower(): h['value'] for h in http_details['response_headers']},
+                network_data["connection_type"] = "http"
+                http_details = record["http"]
+                network_data["http_details"] = {
+                    "request_uri": url,
+                    "request_headers": {
+                        h["name"].replace("-", "_").lower(): h["value"] for h in http_details["request_headers"]
+                    },
+                    "request_method": http_details["http_method"].upper(),
+                    "response_headers": {
+                        h["name"].replace("-", "_").lower(): h["value"] for h in http_details["response_headers"]
+                    },
                 }
-                request.temp_submission_data['url_headers'].update({url: {h['name']: h['value']
-                                                                          for h in http_details['request_headers']}})
-                if http_details.get('status'):
-                    network_data['http_details'].update({'response_status_code': http_details['status']})
+                request.temp_submission_data["url_headers"].update(
+                    {url: {h["name"]: h["value"] for h in http_details["request_headers"]}}
+                )
+                if http_details.get("status"):
+                    network_data["http_details"].update({"response_status_code": http_details["status"]})
                 attach_network_connection(network_data)
 
-            elif record['event_type'] == 'dns':
-                if 'rrname' not in record['dns']:
+            elif record["event_type"] == "dns":
+                if "rrname" not in record["dns"]:
                     continue
-                domain = record['dns']['rrname']
+                domain = record["dns"]["rrname"]
                 if regex.match(DOMAIN_ONLY_REGEX, domain) and domain not in domains and domain not in ips:
                     domains.append(domain)
-                network_data['connection_type'] = 'dns'
+                network_data["connection_type"] = "dns"
                 for lookup_type, resolved_ips in record["dns"].get("grouped", {}).items():
                     if lookup_type == "A":
                         data = deepcopy(network_data)
-                        data['dns_details'] = {
-                            'domain': domain,
-                            'resolved_ips': resolved_ips,
-                            'lookup_type': lookup_type
+                        data["dns_details"] = {
+                            "domain": domain,
+                            "resolved_ips": resolved_ips,
+                            "lookup_type": lookup_type,
                         }
                         attach_network_connection(data)
                     else:
-                        self.log.warning(f'Lookup type [{lookup_type}] found with values {resolved_ips}...')
-            elif record['event_type'] == 'netflow':
+                        self.log.warning(f"Lookup type [{lookup_type}] found with values {resolved_ips}...")
+            elif record["event_type"] == "netflow":
                 attach_network_connection(network_data)
-            elif record['event_type'] == 'alert':
-                if 'signature_id' not in record['alert'] or 'signature' not in record['alert']:
+            elif record["event_type"] == "alert":
+                if "signature_id" not in record["alert"] or "signature" not in record["alert"]:
                     continue
-                signature_id = record['alert']['signature_id']
-                signature = record['alert']['signature']
+                signature_id = record["alert"]["signature_id"]
+                signature = record["alert"]["signature"]
                 if signature_id not in alerts:
                     alerts[signature_id] = []
                 if signature_id not in signatures:
                     try:
-                        proto = getservbyport(dest_port) if dest_port else 'http'
+                        proto = getservbyport(dest_port) if dest_port else "http"
                     except OSError:
-                        proto = 'http'
+                        proto = "http"
                     signatures[signature_id] = {
                         "signature": signature,
-                        "malware_family": record['alert'].get('metadata', {}).get('malware_family', []),
-                        "al_signature": record['alert']['metadata'].get("al_signature", [None])[0],
-                        'classification': record['alert']['metadata'].get('classification', [Classification.UNRESTRICTED])[0],
-                        'attributes': []
+                        "malware_family": record["alert"].get("metadata", {}).get("malware_family", []),
+                        "al_signature": record["alert"]["metadata"].get("al_signature", [None])[0],
+                        "classification": record["alert"]["metadata"].get(
+                            "classification", [Classification.UNRESTRICTED]
+                        )[0],
+                        "attributes": [],
                     }
 
-                    if any(record.get(event_type) for event_type in ['http', 'dns', 'flow']):
+                    if any(record.get(event_type) for event_type in ["http", "dns", "flow"]):
                         attributes = []
                         for source in oid_lookup[flow_id]:
                             attribute = dict(source=source)
                             if not regex.match(IP_ONLY_REGEX, ext_hostname):
-                                attribute['domain'] = ext_hostname
-                            if record.get('http') and record['http'].get('hostname'):
+                                attribute["domain"] = ext_hostname
+                            if record.get("http") and record["http"].get("hostname"):
                                 # Only alerts containing HTTP details can provide URI-relevant information
-                                hostname = reverse_lookup.get(record['http']['hostname'], record['http']['hostname'])
-                                attribute.update({'uri': f"{proto}://{hostname+record['http']['url']}"})
+                                hostname = reverse_lookup.get(record["http"]["hostname"], record["http"]["hostname"])
+                                attribute.update({"uri": f"{proto}://{hostname+record['http']['url']}"})
                             attributes.append(attribute)
 
                         if attributes:
-                            signatures[signature_id].update({'attributes': attributes})
+                            signatures[signature_id].update({"attributes": attributes})
 
                 alerts[signature_id].append((timestamp, src_ip, src_port, dest_ip, dest_port))
 
@@ -380,18 +397,27 @@ class Suricata(ServiceBase):
                         tls_dict[tls_type].append(tls_value)
 
             elif record["event_type"] == "fileinfo":
-                sha256_full = record['fileinfo']['sha256']
+                sha256_full = record["fileinfo"]["sha256"]
                 if sha256_full not in extracted_files.keys():
                     sha256 = f"{sha256_full[:12]}.data"
-                    extracted_files['sha256_full'] = {
-                        'sha256': sha256,
-                        'filename': os.path.basename(record["fileinfo"].get('filename', sha256)) or sha256,
-                        'extracted_file_path': os.path.join(
-                            self.working_directory, 'filestore', sha256_full[: 2].lower(),
-                            sha256_full)}
-        return dict(alerts=alerts, signatures=signatures, domains=domains, ips=ips, urls=urls,
-                    email_addresses=email_addresses, tls=tls_dict, extracted_files=extracted_files.values(),
-                    reverse_lookup=reverse_lookup)
+                    extracted_files["sha256_full"] = {
+                        "sha256": sha256,
+                        "filename": os.path.basename(record["fileinfo"].get("filename", sha256)) or sha256,
+                        "extracted_file_path": os.path.join(
+                            self.working_directory, "filestore", sha256_full[:2].lower(), sha256_full
+                        ),
+                    }
+        return dict(
+            alerts=alerts,
+            signatures=signatures,
+            domains=domains,
+            ips=ips,
+            urls=urls,
+            email_addresses=email_addresses,
+            tls=tls_dict,
+            extracted_files=extracted_files.values(),
+            reverse_lookup=reverse_lookup,
+        )
 
     def execute(self, request):
         file_path = request.file_path
@@ -421,10 +447,9 @@ class Suricata(ServiceBase):
         sys.stderr = mystderr
 
         # Pass the pcap file to Suricata via the socket
-        ret = self.suricata_sc.send_command("pcap-file", {
-            "filename": stripped_filepath,
-            "output-dir": self.working_directory
-        })
+        ret = self.suricata_sc.send_command(
+            "pcap-file", {"filename": stripped_filepath, "output-dir": self.working_directory}
+        )
 
         if not ret or ret["return"] != "OK":
             self.log.exception(f"Failed to submit PCAP for processing: {ret['message']}")
@@ -444,8 +469,17 @@ class Suricata(ServiceBase):
         sys.stderr = old_stderr
         # NOTE: for now we will ignore content of mystdout and mystderr but we have them just in case...
 
-        alerts, signatures, domains, ips, urls, email_addresses, tls_dict, extracted_files, reverse_lookup = \
-            self.parse_suricata_output(request).values()
+        (
+            alerts,
+            signatures,
+            domains,
+            ips,
+            urls,
+            email_addresses,
+            tls_dict,
+            extracted_files,
+            reverse_lookup,
+        ) = self.parse_suricata_output(request).values()
 
         file_extracted_section = ResultSection("File(s) extracted by Suricata")
         # Parse the json results of the service
@@ -454,11 +488,12 @@ class Suricata(ServiceBase):
                 sha256, filename, extracted_file_path = file.values()
                 self.log.info(f"extracted file {filename}")
                 try:
-                    if request.add_extracted(extracted_file_path, filename, "Extracted by Suricata",
-                                             safelist_interface=self.api_interface):
+                    if request.add_extracted(
+                        extracted_file_path, filename, "Extracted by Suricata", safelist_interface=self.api_interface
+                    ):
                         file_extracted_section.add_line(filename)
                         if filename != sha256:
-                            file_extracted_section.add_tag('file.name.extracted', filename)
+                            file_extracted_section.add_tag("file.name.extracted", filename)
                 except FileNotFoundError as e:
                     # An intermittent issue, just try again
                     raise RecoverableError(e)
@@ -480,46 +515,46 @@ class Suricata(ServiceBase):
                     ips.append(domain)
                     continue
                 domain_section.add_line(domain)
-                domain_section.add_tag('network.dynamic.domain', domain)
+                domain_section.add_tag("network.dynamic.domain", domain)
         if ips:
             ip_section = ResultSection("IP Addresses", parent=root_section)
             for ip in ips:
                 # Make sure it's not a local IP
-                if not (ip.startswith("127.")
-                        or ip.startswith("192.168.")
-                        or ip.startswith("10.")
-                        or (ip.startswith("172.")
-                            and 16 <= int(ip.split(".")[1]) <= 31)):
+                if not (
+                    ip.startswith("127.")
+                    or ip.startswith("192.168.")
+                    or ip.startswith("10.")
+                    or (ip.startswith("172.") and 16 <= int(ip.split(".")[1]) <= 31)
+                ):
                     ip_section.add_line(ip)
-                    ip_section.add_tag('network.dynamic.ip', ip)
+                    ip_section.add_tag("network.dynamic.ip", ip)
 
         if urls:
             url_section = ResultSection("URLs", parent=root_section)
             for url in urls:
-                if url.startswith('https'):
-                    url = url.replace(':443', '', 1)
+                if url.startswith("https"):
+                    url = url.replace(":443", "", 1)
                 url_section.add_line(url)
-                url_section.add_tag('network.dynamic.uri', url)
+                url_section.add_tag("network.dynamic.uri", url)
         if email_addresses:
             email_section = ResultSection("Email Addresses", parent=root_section)
             for eml in email_addresses:
                 email_section.add_line(eml)
-                email_section.add_tag('network.email.address', eml)
+                email_section.add_tag("network.email.address", eml)
 
         # Map between suricata key names and AL tag types
         tls_mappings = {
-            "subject": 'cert.subject',
-            "issuerdn": 'cert.issuer',
-            "version": 'cert.version',
-            "notbefore": 'cert.valid.start',
-            "notafter": 'cert.valid.end',
-            "fingerprint": 'cert.thumbprint',
-            "sni": 'network.tls.sni'
+            "subject": "cert.subject",
+            "issuerdn": "cert.issuer",
+            "version": "cert.version",
+            "notbefore": "cert.valid.start",
+            "notafter": "cert.valid.end",
+            "fingerprint": "cert.thumbprint",
+            "sni": "network.tls.sni",
         }
 
         if tls_dict:
-            tls_section = ResultSection("TLS Information", parent=root_section,
-                                        body_format=BODY_FORMAT.JSON)
+            tls_section = ResultSection("TLS Information", parent=root_section, body_format=BODY_FORMAT.JSON)
             kv_body = {}
             for tls_type, tls_values in tls_dict.items():
                 if tls_type == "fingerprint":
@@ -536,18 +571,18 @@ class Suricata(ServiceBase):
                             tls_section.add_tag(tag_type, tls_value)
 
                 elif tls_type == "ja3":
-                    kv_body.setdefault('ja3_hash', [])
-                    kv_body.setdefault('ja3_string', [])
+                    kv_body.setdefault("ja3_hash", [])
+                    kv_body.setdefault("ja3_string", [])
 
                     for ja3_entry in tls_values:
                         ja3_hash = ja3_entry.get("hash")
                         ja3_string = ja3_entry.get("string")
                         if ja3_hash:
-                            kv_body['ja3_hash'].append(ja3_hash)
-                            tls_section.add_tag('network.tls.ja3_hash', ja3_hash)
+                            kv_body["ja3_hash"].append(ja3_hash)
+                            tls_section.add_tag("network.tls.ja3_hash", ja3_hash)
                         if ja3_string:
-                            kv_body['ja3_string'].append(ja3_string)
-                            tls_section.add_tag('network.tls.ja3_string', ja3_string)
+                            kv_body["ja3_string"].append(ja3_string)
+                            tls_section.add_tag("network.tls.ja3_string", ja3_string)
 
                 else:
                     kv_body[tls_type] = tls_values
@@ -558,10 +593,14 @@ class Suricata(ServiceBase):
         # Create the result sections if there are any hits
         if len(alerts) > 0:
             for signature_id, signature_details in signatures.items():
-                signature = signature_details['signature']
-                attributes = signature_details['attributes']
-                section = ResultSection(f'{signature_id}: {signature}',
-                                        classification=Classification.max_classification(signature_details['classification'], request.task.min_classification))
+                signature = signature_details["signature"]
+                attributes = signature_details["attributes"]
+                section = ResultSection(
+                    f"{signature_id}: {signature}",
+                    classification=Classification.max_classification(
+                        signature_details["classification"], request.task.min_classification
+                    ),
+                )
                 heur_id = 3
                 if any(x in signature for x in self.config.get("sure_score")):
                     heur_id = 1
@@ -569,43 +608,49 @@ class Suricata(ServiceBase):
                     heur_id = 2
 
                 section.set_heuristic(heur_id)
-                if signature_details['al_signature']:
-                    section.add_tag("file.rule.suricata", signature_details['al_signature'])
+                if signature_details["al_signature"]:
+                    section.add_tag("file.rule.suricata", signature_details["al_signature"])
                 for timestamp, src_ip, src_port, dest_ip, dest_port in alerts[signature_id][:10]:
                     section.add_line(f"{timestamp} {src_ip}:{src_port} -> {dest_ip}:{dest_port}")
                 if len(alerts[signature_id]) > 10:
-                    section.add_line(f'And {len(alerts[signature_id]) - 10} more flows')
+                    section.add_line(f"And {len(alerts[signature_id]) - 10} more flows")
 
                 # Tag IPs/Domains/URIs associated to signature
                 for flow in alerts[signature_id]:
                     dest_ip = flow[3]
-                    section.add_tag('network.dynamic.ip', dest_ip)
+                    section.add_tag("network.dynamic.ip", dest_ip)
                     if dest_ip in reverse_lookup.keys():
-                        section.add_tag('network.dynamic.domain', reverse_lookup[dest_ip])
-                    [section.add_tag('network.dynamic.uri', uri) for uri in urls
-                        if dest_ip in uri or (reverse_lookup.get(dest_ip) and reverse_lookup[dest_ip] in uri)]
+                        section.add_tag("network.dynamic.domain", reverse_lookup[dest_ip])
+                    [
+                        section.add_tag("network.dynamic.uri", uri)
+                        for uri in urls
+                        if dest_ip in uri or (reverse_lookup.get(dest_ip) and reverse_lookup[dest_ip] in uri)
+                    ]
 
                 # Add a tag for the signature id and the message
-                section.add_tag('network.signature.signature_id', str(signature_id))
-                section.add_tag('network.signature.message', signature)
-                [section.add_tag('network.static.uri', attr['uri']) for attr in attributes if attr.get('uri')]
+                section.add_tag("network.signature.signature_id", str(signature_id))
+                section.add_tag("network.signature.message", signature)
+                [section.add_tag("network.static.uri", attr["uri"]) for attr in attributes if attr.get("uri")]
                 # Tag malware_family
-                for malware_family in signature_details['malware_family']:
-                    section.add_tag('attribution.family', malware_family)
+                for malware_family in signature_details["malware_family"]:
+                    section.add_tag("attribution.family", malware_family)
 
                 result.add_section(section)
                 self.ontology.add_result_part(
                     Signature,
                     data=dict(
-                        name=signature_details['al_signature'],
-                        type="SURICATA", malware_families=signature_details['malware_family'] or None,
-                        attributes=attributes))
+                        name=signature_details["al_signature"],
+                        type="SURICATA",
+                        malware_families=signature_details["malware_family"] or None,
+                        attributes=attributes,
+                    ),
+                )
 
         # Add the original Suricata output as a supplementary file in the result
-        request.add_supplementary(os.path.join(self.working_directory, 'eve.json'), 'SuricataEventLog.json', 'json')
+        request.add_supplementary(os.path.join(self.working_directory, "eve.json"), "SuricataEventLog.json", "json")
 
         # Add the stats.log to the result, which can be used to determine service success
-        if os.path.exists(os.path.join(self.working_directory, 'stats.log')):
-            request.add_supplementary(os.path.join(self.working_directory, 'stats.log'), 'stats.log', 'log')
+        if os.path.exists(os.path.join(self.working_directory, "stats.log")):
+            request.add_supplementary(os.path.join(self.working_directory, "stats.log"), "stats.log", "log")
 
         request.result = result
