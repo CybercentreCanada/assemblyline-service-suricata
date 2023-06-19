@@ -1,5 +1,6 @@
 from assemblyline.common import forge
 from assemblyline_v4_service.updater.updater import ServiceUpdater
+
 from suricata_.suricata_importer import SuricataImporter
 
 classification = forge.get_classification()
@@ -17,6 +18,6 @@ class SuricataUpdateServer(ServiceUpdater):
         self.log.info(f"{total_imported} signatures were imported for source {source_name}")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     with SuricataUpdateServer(default_pattern=".*\.rules") as server:
         server.serve_forever()
