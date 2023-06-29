@@ -643,6 +643,7 @@ class Suricata(ServiceBase):
                         type="SURICATA",
                         malware_families=signature_details["malware_family"] or None,
                         attributes=attributes,
+                        signature_id=signature_id
                     ),
                 )
 
