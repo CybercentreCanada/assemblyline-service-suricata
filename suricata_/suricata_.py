@@ -6,7 +6,6 @@ import time
 from copy import deepcopy
 from io import StringIO
 from socket import getservbyport
-from typing import Any, Dict
 
 import dateutil.parser as dateparser
 import regex
@@ -342,10 +341,6 @@ class Suricata(ServiceBase):
                     signatures[signature_id] = {
                         "signature": signature,
                         "malware_family": record["alert"].get("metadata", {}).get("malware_family", []),
-                        "al_signature": record["alert"]["metadata"].get("al_signature", [None])[0],
-                        "classification": record["alert"]["metadata"].get(
-                            "classification", [Classification.UNRESTRICTED]
-                        )[0],
                         "attributes": [],
                     }
 
@@ -593,12 +588,13 @@ class Suricata(ServiceBase):
         # Create the result sections if there are any hits
         if len(alerts) > 0:
             for signature_id, signature_details in signatures.items():
+                signature_meta = self.signatures_meta[str(signature_id)]
                 signature = signature_details["signature"]
                 attributes = signature_details["attributes"]
                 section = ResultSection(
                     f"{signature_id}: {signature}",
                     classification=Classification.max_classification(
-                        signature_details["classification"], request.task.min_classification
+                        signature_meta['classification'], request.task.min_classification
                     ),
                 )
                 heur_id = 3
@@ -608,8 +604,8 @@ class Suricata(ServiceBase):
                     heur_id = 2
 
                 section.set_heuristic(heur_id)
-                if signature_details["al_signature"]:
-                    section.add_tag("file.rule.suricata", signature_details["al_signature"])
+                if signature_details:
+                    section.add_tag("file.rule.suricata", f"{signature_meta['source']}.{signature}")
                 for timestamp, src_ip, src_port, dest_ip, dest_port in alerts[signature_id][:10]:
                     section.add_line(f"{timestamp} {src_ip}:{src_port} -> {dest_ip}:{dest_port}")
                 if len(alerts[signature_id]) > 10:
@@ -639,7 +635,7 @@ class Suricata(ServiceBase):
                 self.ontology.add_result_part(
                     Signature,
                     data=dict(
-                        name=signature_details["al_signature"],
+                        name=f"{signature_meta['source']}.{signature}",
                         type="SURICATA",
                         malware_families=signature_details["malware_family"] or None,
                         attributes=attributes,
