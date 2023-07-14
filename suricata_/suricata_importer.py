@@ -36,20 +36,11 @@ class SuricataImporter:
             status = "DEPLOYED" if signature.enabled else "DISABLED"
             classification = default_classification or self.classification.UNRESTRICTED
 
-            # Update metadata to include reference to signature in Assemblyline
-            orig_meta, new_meta = signature.metadata, deepcopy(signature.metadata)
-            new_meta.append(f"al_signature {source}.{name}")
-            if not any(m.startswith("classification ") for m in signature.metadata):
-                # If there's no classification metadata, then set it based on the source
-                new_meta.append(f"classification {classification}")
-
-            if orig_meta:
-                # Replace metadata if there was any metadata originally
-                signature.raw = signature.raw.replace(", ".join(orig_meta), ", ".join(new_meta))
-            else:
-                # Otherwise append metadata to rule
-                signature.raw = signature.raw[:-1] + f" metadata:{', '.join(new_meta)};)"
-
+            # Extract the rule's classification, if any
+            for meta in signature.metadata:
+                if meta.startswith('classification '):
+                    classification = meta.replace('classification ', '')
+                    break
             sig = Signature(
                 dict(
                     classification=classification,
