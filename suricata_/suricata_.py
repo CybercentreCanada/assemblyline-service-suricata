@@ -358,7 +358,11 @@ class Suricata(ServiceBase):
                             if record.get("http") and record["http"].get("hostname"):
                                 # Only alerts containing HTTP details can provide URI-relevant information
                                 hostname = reverse_lookup.get(record["http"]["hostname"], record["http"]["hostname"])
-                                attribute.update({"uri": f"{proto}://{hostname+record['http']['url']}"})
+                                if record['http']['url'].startswith(hostname):
+                                    url = f"{proto}://{record['http']['url']}"
+                                else:
+                                    url = f"{proto}://{hostname+record['http']['url']}"
+                                attribute.update({"uri": url})
                             attributes.append(attribute)
 
                         if attributes:
