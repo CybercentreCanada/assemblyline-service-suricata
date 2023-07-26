@@ -1,15 +1,10 @@
 import logging
 import os
-from copy import deepcopy
 from typing import List
 
 from assemblyline.common import forge
 from assemblyline.odm.models.signature import Signature
 from suricata.update.rule import Rule, parse_file
-
-UPDATE_CONFIGURATION_PATH = os.environ.get("UPDATE_CONFIGURATION_PATH", None)
-
-BATCH_SIZE_LIMIT = int(os.environ.get("SIG_BATCH_SIZE", 1000))
 
 
 class SuricataImporter:
@@ -57,13 +52,8 @@ class SuricataImporter:
 
             upload_list.append(sig.as_primitives())
             order += 1
-            # If we hit the batch size limit, send to API
-            if order % BATCH_SIZE_LIMIT == 0:
-                self.log.info(f"Batch limit reached: {BATCH_SIZE_LIMIT}. Sending batch to Signature API..")
-                order_completed += add_update_many(source, "suricata", upload_list, dedup_name=False)["success"]
-                upload_list = []
 
-        order_completed += add_update_many(source, "suricata", upload_list, dedup_name=False)["success"]
+        order_completed = add_update_many(source, "suricata", upload_list, dedup_name=False)["success"]
         self.log.info(
             f"Imported {order_completed}/{order - 1} signatures" f" from {os.path.basename(cur_file)} into Assemblyline"
         )
