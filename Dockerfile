@@ -23,6 +23,7 @@ FROM base AS build
 USER assemblyline
 RUN touch /tmp/before-pip
 RUN pip install --no-cache-dir --user \
+  assemblyline-service-utilities \
   simplejson \
   python-dateutil \
   suricata-update \
