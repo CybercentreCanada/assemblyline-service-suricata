@@ -244,7 +244,8 @@ class Suricata(ServiceBase):
                 self.ontology.add_result_part(NetworkConnection, data)
 
             # Add ObjectID to lookup for signatures/alerts
-            oid_lookup.setdefault(flow_id, []).append(data["objectid"])
+            if flow_id:
+                oid_lookup.setdefault(flow_id, []).append(data["objectid"])
 
         # Parse the json results of the service and organize them into certain categories
         for line in open(os.path.join(self.working_directory, "eve.json")):
@@ -269,7 +270,7 @@ class Suricata(ServiceBase):
             dest_port = record.get("dest_port")
             proto = record.get("proto", "TCP").lower()
             direction = "outbound"
-            flow_id = record["flow_id"]
+            flow_id = record.get("flow_id")
 
             ext_hostname = reverse_lookup.get(dest_ip)
             if not ext_hostname:
@@ -403,7 +404,7 @@ class Suricata(ServiceBase):
 
                     if any(
                         record.get(event_type) for event_type in ["http", "dns", "flow"]
-                    ):
+                    ) and flow_id:
                         attributes = []
                         for source in oid_lookup[flow_id]:
                             attribute = dict(source=source)
