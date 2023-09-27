@@ -418,7 +418,7 @@ class Suricata(ServiceBase):
                 sha256_full = record["fileinfo"]["sha256"]
                 if sha256_full not in extracted_files.keys():
                     sha256 = f"{sha256_full[:12]}.data"
-                    extracted_files["sha256_full"] = {
+                    extracted_files[sha256_full] = {
                         "sha256": sha256,
                         "filename": os.path.basename(record["fileinfo"].get("filename", sha256)) or sha256,
                         "extracted_file_path": os.path.join(
