@@ -22,9 +22,7 @@ class SuricataUpdateServer(ServiceUpdater):
             for rule_signature in parse_file(file):
                 name = rule_signature.msg or rule_signature.sid
                 status = "DEPLOYED" if rule_signature.enabled else "DISABLED"
-                classification = (
-                    default_classification or self.classification.UNRESTRICTED
-                )
+                classification = default_classification or self.classification.UNRESTRICTED
 
                 # Extract the rule's classification, if any
                 for meta in rule_signature.metadata:
@@ -46,12 +44,8 @@ class SuricataUpdateServer(ServiceUpdater):
                     )
                 )
 
-        total_imported = client.signature.add_update_many(
-            source_name, self.updater_type, signatures
-        )["success"]
-        self.log.info(
-            f"{total_imported} signatures were imported for source {source_name}"
-        )
+        total_imported = client.signature.add_update_many(source_name, self.updater_type, signatures)["success"]
+        self.log.info(f"{total_imported} signatures were imported for source {source_name}")
 
 
 if __name__ == "__main__":
