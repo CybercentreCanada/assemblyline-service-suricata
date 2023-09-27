@@ -2,7 +2,6 @@
     "editor.codeActionsOnSave": {
         "source.organizeImports": true,
     },
-    "editor.defaultFormatter": "ms-python.black-formatter",
     "editor.formatOnSave": true,
     "editor.rulers": [
         120
@@ -18,5 +17,16 @@
         "120",
         "--profile=black",
         // "--src=${workspaceFolder}"
-    ]
+    ],
+    "[python]": {
+        "editor.defaultFormatter": "ms-python.black-formatter"
+    },
+    "black-formatter.args": [
+        "--line-length=120"
+    ],
+    "flake8.args": [
+        "--max-line-length=120",
+        //Added the ignore of E203 for now : https://github.com/PyCQA/pycodestyle/issues/373
+        "--ignore=E203,W503"
+    ],
 }
