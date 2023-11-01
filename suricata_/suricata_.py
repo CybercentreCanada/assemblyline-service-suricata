@@ -11,16 +11,18 @@ import dateutil.parser as dateparser
 import regex
 import suricatasc
 import yaml
-from assemblyline.common.exceptions import RecoverableError
-from assemblyline.common.forge import get_classification
-from assemblyline.common.str_utils import safe_str
-from assemblyline.odm.base import DOMAIN_ONLY_REGEX, IP_ONLY_REGEX
-from assemblyline.odm.models.ontology.results import NetworkConnection, Signature
 from assemblyline_service_utilities.common.network_helper import convert_url_to_https
 from assemblyline_v4_service.common.base import ServiceBase
 from assemblyline_v4_service.common.request import MaxExtractedExceeded
 from assemblyline_v4_service.common.result import BODY_FORMAT, Result, ResultSection
 from retrying import RetryError, retry
+
+from assemblyline.common.exceptions import RecoverableError
+from assemblyline.common.forge import get_classification
+from assemblyline.common.str_utils import safe_str
+from assemblyline.odm.base import DOMAIN_ONLY_REGEX, IP_ONLY_REGEX
+from assemblyline.odm.models.ontology.results import NetworkConnection, Signature
+from assemblyline.odm.models.result import PARENT_RELATION
 
 SURICATA_BIN = "/usr/local/bin/suricata"
 Classification = get_classification()
@@ -198,7 +200,7 @@ class Suricata(ServiceBase):
         ancestry = request.temp_submission_data.setdefault("ancestry", [])
 
         from_proxied_sandbox = (
-            any([a[-1]["parent_relation"] == "DYNAMIC" for a in ancestry]) and self.uses_proxy_in_sandbox
+            any([a[-1]["parent_relation"] == PARENT_RELATION.DYNAMIC for a in ancestry]) and self.uses_proxy_in_sandbox
         )
 
         reverse_lookup = {}
