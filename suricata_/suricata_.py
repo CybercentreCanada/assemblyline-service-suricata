@@ -325,7 +325,7 @@ class Suricata(ServiceBase):
                     domains.append(domain)
                 network_data["connection_type"] = "dns"
                 for lookup_type, resolved_ips in record["dns"].get("grouped", {}).items():
-                    if lookup_type == "A":
+                    if lookup_type in ["A", "AAAA"]:
                         data = deepcopy(network_data)
                         data["dns_details"] = {
                             "domain": domain,
@@ -333,6 +333,12 @@ class Suricata(ServiceBase):
                             "lookup_type": lookup_type,
                         }
                         attach_network_connection(data)
+                    elif lookup_type == "PTR":
+                        # Reverse lookup occurred
+                        if domain.endswith("in-addr.arpa"):
+                            # Extract the actual IP and it's resolution
+                            domain = domain.rstrip(".in-addr.arpa")[::-1]
+                        reverse_lookup[domain] = resolved_ips[0]
                     else:
                         self.log.warning(f"Lookup type [{lookup_type}] found with values {resolved_ips}...")
             elif record["event_type"] == "netflow":
