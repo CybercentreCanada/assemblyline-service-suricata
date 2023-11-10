@@ -20,6 +20,7 @@ from assemblyline_service_utilities.common.network_helper import convert_url_to_
 from assemblyline_v4_service.common.base import ServiceBase
 from assemblyline_v4_service.common.request import MaxExtractedExceeded
 from assemblyline_v4_service.common.result import BODY_FORMAT, Result, ResultSection
+from assemblyline_v4_service.common.task import PARENT_RELATION
 from retrying import RetryError, retry
 
 SURICATA_BIN = "/usr/local/bin/suricata"
@@ -198,7 +199,7 @@ class Suricata(ServiceBase):
         ancestry = request.temp_submission_data.setdefault("ancestry", [])
 
         from_proxied_sandbox = (
-            any([a[-1]["parent_relation"] == "DYNAMIC" for a in ancestry]) and self.uses_proxy_in_sandbox
+            any([a[-1]["parent_relation"] == PARENT_RELATION.DYNAMIC for a in ancestry]) and self.uses_proxy_in_sandbox
         )
 
         reverse_lookup = {}
