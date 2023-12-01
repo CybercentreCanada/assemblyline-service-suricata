@@ -40,6 +40,7 @@ class Suricata(ServiceBase):
         self.suricata_yaml = "/etc/suricata/suricata.yaml"
         self.suricata_log = "/var/log/suricata/suricata.log"
         self.uses_proxy_in_sandbox = self.config.get("uses_proxy_in_sandbox", False)
+        self.suricata_conf = self.config.get("suricata_conf", {})
 
     # Use an external tool to strip frame headers
     @staticmethod
@@ -113,8 +114,14 @@ class Suricata(ServiceBase):
         # home_net = re.sub(r"([/\[\]])", r"\\\1", self.home_net)
         home_net = self.home_net
         with open(source_path) as sp:
+            conf = yaml.safe_load(
+                sp.read().replace("__HOME_NET__", home_net).replace("__RULE_FILES__", self.rules_config)
+            )
+            # Update the configuration based on service configuration
+            conf.update(self.suricata_conf)
             with open(dest_path, "w") as dp:
-                dp.write(sp.read().replace("__HOME_NET__", home_net).replace("__RULE_FILES__", self.rules_config))
+                dp.write("%YAML 1.1\n---\n")
+                dp.write(yaml.dump(conf))
 
     # Send the reload_rules command to the socket
     def reload_rules(self):
