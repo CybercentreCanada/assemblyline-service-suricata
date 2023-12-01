@@ -22,6 +22,7 @@ config:
   vhigh_score: ["EXPLOIT", "SCAN", "Adware", "PUP"]
   home_net: any
   uses_proxy_in_sandbox: false # Sandbox in Assemblyline is behind a proxy
+  suricata_conf: {}
 
 submission_params:
   - default: true
