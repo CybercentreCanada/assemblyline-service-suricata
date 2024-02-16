@@ -13,7 +13,6 @@ class SuricataUpdateServer(ServiceUpdater):
     def import_update(
         self,
         files_sha256,
-        client,
         source_name,
         default_classification=classification.UNRESTRICTED,
     ):
@@ -44,7 +43,7 @@ class SuricataUpdateServer(ServiceUpdater):
                     )
                 )
 
-        total_imported = client.signature.add_update_many(source_name, self.updater_type, signatures)["success"]
+        total_imported = self.client.signature.add_update_many(source_name, self.updater_type, signatures)["success"]
         self.log.info(f"{total_imported} signatures were imported for source {source_name}")
 
 
