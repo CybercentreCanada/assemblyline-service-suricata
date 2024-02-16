@@ -16,6 +16,7 @@ enabled: true
 is_external: false
 licence_count: 0
 uses_temp_submission_data: true
+privileged: true
 
 config:
   sure_score: ["MALWARE", "TROJAN", "CURRENT_EVENTS", "CnC", "Checkin"]
@@ -52,7 +53,7 @@ heuristics:
 docker_config:
   image: ${REGISTRY}cccs/assemblyline-service-suricata:$SERVICE_TAG
   cpu_cores: 1
-  ram_mb: 1536
+  ram_mb: 2048
 
 dependencies:
   updates:
@@ -61,6 +62,8 @@ dependencies:
       command: ["python", "-m", "suricata_.update_server"]
       image: ${REGISTRY}cccs/assemblyline-service-suricata:$SERVICE_TAG
       ports: ["5003"]
+      cpu_cores: 2
+      ram_mb: 4096
     run_as_core: True
 
 update_config:
