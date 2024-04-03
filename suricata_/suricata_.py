@@ -564,6 +564,10 @@ class Suricata(ServiceBase):
                     or ip.startswith("192.168.")
                     or ip.startswith("10.")
                     or (ip.startswith("172.") and 16 <= int(ip.split(".")[1]) <= 31)
+                    # Link-local IPv6 addresses
+                    or ip.startswith("fe80:0000:0000:0000:")
+                    # All-routers link-local multicast
+                    or ip != "ff02:0000:0000:0000:0000:0000:0000:0002"
                 ):
                     ip_section.add_line(ip)
                     ip_section.add_tag("network.dynamic.ip", ip)
