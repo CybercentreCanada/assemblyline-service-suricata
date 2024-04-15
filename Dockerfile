@@ -6,8 +6,6 @@ ENV SURICATA_VERSION 6.0.13
 
 USER root
 
-RUN echo 'deb http://deb.debian.org/debian buster-backports main' >> /etc/apt/sources.list
-
 # Install APT dependancies
 RUN apt-get update && apt-get install -y wget curl \
   libpcre3 libpcre3-dbg libpcre3-dev build-essential libpcap-dev   \
