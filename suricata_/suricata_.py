@@ -698,6 +698,7 @@ class Suricata(ServiceBase):
                         malware_families=signature_details["malware_family"] or None,
                         attributes=attributes,
                         signature_id=signature_id,
+                        classification=signature_details["classification"],
                     ),
                 )
 
