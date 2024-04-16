@@ -222,6 +222,11 @@ class Suricata(ServiceBase):
         }
 
         def attach_network_connection(data: dict):
+            # Check for any fields that may be null and remove them from the data before applying validation
+            for k in list(data.keys()):
+                if data.get(k) == None:
+                    data.pop(k)
+
             oid = NetworkConnection.get_oid(data)
             data["objectid"]["ontology_id"] = oid
             # Don't overwrite important netflows
@@ -254,6 +259,7 @@ class Suricata(ServiceBase):
             dest_ip = record.get("dest_ip")
             dest_port = record.get("dest_port")
             proto = record.get("proto", "TCP").lower()
+            app_proto = record.get("app_proto", None)
             direction = "outbound"
             flow_id = record.get("flow_id")
 
@@ -273,6 +279,7 @@ class Suricata(ServiceBase):
                 "destination_ip": dest_ip,
                 "destination_port": dest_port,
                 "transport_layer_protocol": proto,
+                "connection_type": app_proto,
                 "direction": direction,
             }
 
@@ -371,32 +378,34 @@ class Suricata(ServiceBase):
                         "attributes": [],
                     }
 
-                    if any(record.get(event_type) for event_type in ["http", "dns", "flow"]) and flow_id:
-                        attributes = []
-                        for source in oid_lookup[flow_id]:
-                            attribute = dict(source=source)
-                            if not regex.match(IP_ONLY_REGEX, ext_hostname):
-                                attribute["domain"] = ext_hostname
-                            if record.get("http") and record["http"].get("hostname"):
-                                # Only alerts containing HTTP details can provide URI-relevant information
-                                hostname = reverse_lookup.get(
-                                    record["http"]["hostname"],
-                                    record["http"]["hostname"],
-                                )
-                                if record["http"]["url"].startswith(hostname):
-                                    url = f"{proto}://{record['http']['url']}"
-                                else:
-                                    url = f"{proto}://{hostname+record['http']['url']}"
-                                url = (
-                                    convert_url_to_https(record["http"].get("http_method", "GET"), url)
-                                    if from_proxied_sandbox
-                                    else url
-                                )
-                                attribute.update({"uri": url})
-                            attributes.append(attribute)
+                if any(record.get(event_type) for event_type in ["http", "dns", "flow"]) and flow_id:
+                    attributes = []
+                    for source in oid_lookup[flow_id]:
+                        attribute = dict(source=source)
+                        if not regex.match(IP_ONLY_REGEX, ext_hostname):
+                            attribute["domain"] = ext_hostname
+                        if record.get("http") and record["http"].get("hostname"):
+                            # Only alerts containing HTTP details can provide URI-relevant information
+                            hostname = reverse_lookup.get(
+                                record["http"]["hostname"],
+                                record["http"]["hostname"],
+                            )
+                            if record["http"]["url"].startswith(hostname):
+                                url = f"{proto}://{record['http']['url']}"
+                            else:
+                                url = f"{proto}://{hostname+record['http']['url']}"
+                            url = (
+                                convert_url_to_https(record["http"].get("http_method", "GET"), url)
+                                if from_proxied_sandbox
+                                else url
+                            )
+                            attribute.update({"uri": url})
+                        attributes.append(attribute)
 
-                        if attributes:
-                            signatures[signature_key].update({"attributes": attributes})
+                    if attributes:
+                        signatures[signature_id]["attributes"] = (
+                            signatures[signature_id].get("attributes", []) + attributes
+                        )
 
                 alerts[signature_key].append((timestamp, src_ip, src_port, dest_ip, dest_port))
 
@@ -693,6 +702,7 @@ class Suricata(ServiceBase):
                         malware_families=signature_details["malware_family"] or None,
                         attributes=attributes,
                         signature_id=signature_id,
+                        classification=signature_details["classification"],
                     ),
                 )
 
