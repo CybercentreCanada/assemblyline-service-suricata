@@ -78,7 +78,7 @@ class Suricata(ServiceBase):
                 self.log.info(f"Ruleset {ruleset['id']}: {ruleset['rules_loaded']} rules loaded")
                 if ruleset["rules_failed"] and ruleset["rules_loaded"] == 0:
                     self.log.error(f"Ruleset {ruleset['id']}: {ruleset['rules_failed']} rules failed to load")
-                else:
+                elif ruleset["rules_failed"]:
                     self.log.warning(
                         f"Ruleset {ruleset['id']}: {ruleset['rules_failed']} rules failed to load."
                         "This can be due to duplication of rules among muliple rulesets being loaded."
@@ -355,15 +355,17 @@ class Suricata(ServiceBase):
                 if "signature_id" not in record["alert"] or "signature" not in record["alert"]:
                     continue
                 signature_id = record["alert"]["signature_id"]
+                gid = record["alert"]["gid"]
                 signature = record["alert"]["signature"]
-                if signature_id not in alerts:
-                    alerts[signature_id] = []
-                if signature_id not in signatures:
+                signature_key = f"{gid}:{signature_id}"
+                if signature_key not in alerts:
+                    alerts[signature_key] = []
+                if signature_key not in signatures:
                     try:
                         proto = getservbyport(dest_port) if dest_port else "http"
                     except OSError:
                         proto = "http"
-                    signatures[signature_id] = {
+                    signatures[signature_key] = {
                         "signature": signature,
                         "malware_family": record["alert"].get("metadata", {}).get("malware_family", []),
                         "attributes": [],
@@ -394,9 +396,9 @@ class Suricata(ServiceBase):
                             attributes.append(attribute)
 
                         if attributes:
-                            signatures[signature_id].update({"attributes": attributes})
+                            signatures[signature_key].update({"attributes": attributes})
 
-                alerts[signature_id].append((timestamp, src_ip, src_port, dest_ip, dest_port))
+                alerts[signature_key].append((timestamp, src_ip, src_port, dest_ip, dest_port))
 
             elif record["event_type"] == "smtp":
                 # extract email metadata
@@ -635,13 +637,15 @@ class Suricata(ServiceBase):
 
         # Create the result sections if there are any hits
         if len(alerts) > 0:
-            for signature_id, signature_details in signatures.items():
-                signature_meta = self.signatures_meta[str(signature_id)]
+            for signature_key, signature_details in signatures.items():
+                _, signature_id = signature_key.split(":", 1)
+                signature_meta = self.signatures_meta[signature_key]
                 signature = signature_details["signature"]
                 attributes = signature_details["attributes"]
                 classification = signature_meta["classification"]
+                source = signature_meta["source"]
                 section = ResultSection(
-                    f"{signature_id}: {signature}",
+                    f"[{source}] {signature_id}: {signature}",
                     classification=Classification.max_classification(
                         classification,
                         request.task.min_classification,
@@ -655,14 +659,14 @@ class Suricata(ServiceBase):
 
                 section.set_heuristic(heur_id)
                 if signature_details:
-                    section.add_tag("file.rule.suricata", f"{signature_meta['source']}.{signature}")
-                for timestamp, src_ip, src_port, dest_ip, dest_port in alerts[signature_id][:10]:
+                    section.add_tag("file.rule.suricata", f"{source}.{signature}")
+                for timestamp, src_ip, src_port, dest_ip, dest_port in alerts[signature_key][:10]:
                     section.add_line(f"{timestamp} {src_ip}:{src_port} -> {dest_ip}:{dest_port}")
-                if len(alerts[signature_id]) > 10:
-                    section.add_line(f"And {len(alerts[signature_id]) - 10} more flows")
+                if len(alerts[signature_key]) > 10:
+                    section.add_line(f"And {len(alerts[signature_key]) - 10} more flows")
 
                 # Tag IPs/Domains/URIs associated to signature
-                for flow in alerts[signature_id]:
+                for flow in alerts[signature_key]:
                     dest_ip = flow[3]
                     section.add_tag("network.dynamic.ip", dest_ip)
                     if dest_ip in reverse_lookup.keys():
