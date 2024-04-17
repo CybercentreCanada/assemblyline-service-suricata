@@ -403,8 +403,8 @@ class Suricata(ServiceBase):
                         attributes.append(attribute)
 
                     if attributes:
-                        signatures[signature_id]["attributes"] = (
-                            signatures[signature_id].get("attributes", []) + attributes
+                        signatures[signature_key]["attributes"] = (
+                            signatures[signature_key].get("attributes", []) + attributes
                         )
 
                 alerts[signature_key].append((timestamp, src_ip, src_port, dest_ip, dest_port))
