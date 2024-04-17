@@ -642,11 +642,12 @@ class Suricata(ServiceBase):
                 signature_meta = self.signatures_meta[signature_key]
                 signature = signature_details["signature"]
                 attributes = signature_details["attributes"]
+                classification = signature_meta["classification"]
                 source = signature_meta["source"]
                 section = ResultSection(
                     f"[{source}] {signature_id}: {signature}",
                     classification=Classification.max_classification(
-                        signature_meta["classification"],
+                        classification,
                         request.task.min_classification,
                     ),
                 )
@@ -693,6 +694,7 @@ class Suricata(ServiceBase):
                         malware_families=signature_details["malware_family"] or None,
                         attributes=attributes,
                         signature_id=signature_id,
+                        classification=classification,
                     ),
                 )
 
