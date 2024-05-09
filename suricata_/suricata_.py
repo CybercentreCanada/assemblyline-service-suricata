@@ -258,7 +258,7 @@ class Suricata(ServiceBase):
             reverse_lookup,
         ) = parse_suricata_output(
             self.working_directory, request.temp_submission_data, self.uses_proxy_in_sandbox, self.ontology
-        )
+        ).values()
 
         file_extracted_section = ResultSection("File(s) extracted by Suricata")
         # Parse the json results of the service
