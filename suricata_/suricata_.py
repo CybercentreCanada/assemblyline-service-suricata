@@ -1,16 +1,15 @@
 import json
 import os
+import regex
 import subprocess
+import suricatasc
 import sys
 import time
-from copy import deepcopy
-from io import StringIO
-from socket import getservbyport
-
-import dateutil.parser as dateparser
-import regex
-import suricatasc
 import yaml
+
+from io import StringIO
+from retrying import RetryError, retry
+
 from assemblyline.common.exceptions import RecoverableError
 from assemblyline.common.forge import get_classification
 from assemblyline.common.str_utils import safe_str
@@ -21,7 +20,6 @@ from assemblyline_v4_service.common.base import ServiceBase
 from assemblyline_v4_service.common.request import MaxExtractedExceeded
 from assemblyline_v4_service.common.result import BODY_FORMAT, Result, ResultSection
 from assemblyline_v4_service.common.task import PARENT_RELATION
-from retrying import RetryError, retry
 
 from suricata_.helper import parse_suricata_output
 

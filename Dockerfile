@@ -25,6 +25,7 @@ RUN pip install --no-cache-dir --user \
   simplejson \
   python-dateutil \
   suricata-update \
+  suricataparser \
   retrying && rm -rf ~/.cache/pip
 
 USER root
