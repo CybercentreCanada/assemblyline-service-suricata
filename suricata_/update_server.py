@@ -8,7 +8,7 @@ import time
 from assemblyline.common import forge
 from assemblyline.odm.models.signature import Signature
 from assemblyline_v4_service.updater.updater import ServiceUpdater, SIGNATURES_META_FILENAME, UPDATER_DIR, STATUS_FILE
-from suricata.update.rule import parse_file
+from suricataparser import parse_file
 
 classification = forge.get_classification()
 
@@ -68,11 +68,16 @@ class SuricataUpdateServer(ServiceUpdater):
             source_path = os.path.join(suricata_dir, source)
             if not os.path.exists(source_path):
                 continue
-            content = ""
-            with open(source_path, "r+") as fh:
-                content = fh.read()
-                fh.seek(0)
-                fh.write(content.replace(";)", f"; gid:{gid};)"))
+
+            # Parse and update rules with GID
+            updated_rules = []
+            for rule in parse_file(source_path):
+                rule.add_option("gid", gid)
+                updated_rules.append(rule.build_rule())
+
+            # Write updated rules back to disk
+            with open(source_path, "w") as fh:
+                fh.write("\n".join(updated_rules))
 
         # Pull signature metadata from the API
         signature_map = {
