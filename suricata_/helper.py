@@ -201,7 +201,7 @@ def parse_suricata_output(
 
             if any([record.get(event_type) for event_type in ["http", "dns", "flow"]]) and flow_id:
                 attributes = []
-                for source in oid_lookup[flow_id]:
+                for source in oid_lookup.get(flow_id, []):
                     attribute = dict(source=source)
                     if not regex.match(IP_ONLY_REGEX, ext_hostname):
                         attribute["domain"] = ext_hostname
