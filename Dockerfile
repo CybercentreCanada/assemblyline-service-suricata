@@ -2,7 +2,7 @@ ARG branch=latest
 FROM cccs/assemblyline-v4-service-base:$branch AS base
 
 ENV SERVICE_PATH suricata_.suricata_.Suricata
-ENV SURICATA_VERSION 6.0.13
+ENV SURICATA_VERSION 7.0.5
 
 USER root
 
@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y wget curl \
   libnet1-dev libyaml-0-2 libyaml-dev pkg-config zlib1g zlib1g-dev \
   libcap-ng-dev libcap-ng0 make libmagic-dev libjansson-dev\
   libnss3-dev libgeoip-dev liblua5.1-dev libhiredis-dev libevent-dev \
-  rustc cargo autoconf \
+  rustc cargo autoconf libpcre2-dev\
   && rm -rf /var/lib/apt/lists/*
 
 FROM base AS build
@@ -26,6 +26,7 @@ RUN pip install --no-cache-dir --user \
   python-dateutil \
   suricata-update \
   suricataparser \
+  async_timeout \
   retrying && rm -rf ~/.cache/pip
 
 USER root
@@ -83,7 +84,8 @@ RUN mkdir -p /var/log/suricata && chown -R assemblyline /var/log/suricata
 RUN mkdir -p /var/run/suricata && chown -R assemblyline /var/run/suricata
 
 # Update suricata config
-COPY suricata_/conf/suricata.yaml /etc/suricata/
+COPY suricata_/conf/suricata7_0_5.yaml /etc/suricata/suricata.yaml
+COPY suricata_/conf/suricata7_0_5.yaml /etc/suricata/
 RUN chown assemblyline /etc/suricata/suricata.yaml
 RUN sed -i -e 's/__HOME_NET__/any/g' /etc/suricata/suricata.yaml
 RUN sed -i -e 's/__RULE_FILES__/rule-files: []/g' /etc/suricata/suricata.yaml
