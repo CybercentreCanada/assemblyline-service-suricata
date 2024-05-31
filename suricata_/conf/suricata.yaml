@@ -223,7 +223,7 @@ outputs:
         - nfs
         - smb
         - tftp
-        - ikev2
+        - ike
         - krb5
         - dhcp:
             # DHCP logging requires Rust.
@@ -530,7 +530,7 @@ outputs:
 #      include-pid: no # set to yes to include pid in file names
 
   # output module to log files tracked in a easily parsable JSON format
-  - file-log:
+  - eve-log:
       enabled: yes
       filename: files-json.log
       append: yes
