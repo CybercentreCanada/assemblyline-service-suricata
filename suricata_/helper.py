@@ -221,6 +221,12 @@ def parse_suricata_output(
                             else url
                         )
                         attribute.update({"uri": url})
+                    elif record.get("dns"):
+                        # Only attach network results that are directly related to the alert
+                        network_part: NetworkConnection = ontology._result_parts.get(source['ontology_id'])
+                        if not any([query["rrname"] == network_part.dns_details.domain \
+                                    for query in record["dns"]["query"]]):
+                            continue
                     attributes.append(attribute)
 
                 if attributes:
