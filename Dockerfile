@@ -2,7 +2,7 @@ ARG branch=latest
 FROM cccs/assemblyline-v4-service-base:$branch AS base
 
 ENV SERVICE_PATH suricata_.suricata_.Suricata
-ENV SURICATA_VERSION 6.0.13
+ENV SURICATA_VERSION 7.0.5
 
 USER root
 
@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y wget curl \
   libnet1-dev libyaml-0-2 libyaml-dev pkg-config zlib1g zlib1g-dev \
   libcap-ng-dev libcap-ng0 make libmagic-dev libjansson-dev\
   libnss3-dev libgeoip-dev liblua5.1-dev libhiredis-dev libevent-dev \
-  rustc cargo autoconf \
+  rustc cargo autoconf libpcre2-dev\
   && rm -rf /var/lib/apt/lists/*
 
 FROM base AS build
@@ -26,6 +26,7 @@ RUN pip install --no-cache-dir --user \
   python-dateutil \
   suricata-update \
   suricataparser \
+  async_timeout \
   retrying && rm -rf ~/.cache/pip
 
 USER root
