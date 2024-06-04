@@ -474,14 +474,12 @@ class Suricata(ServiceBase):
                 result.add_section(section)
                 self.ontology.add_result_part(
                     Signature,
-                    data=dict(
-                        name=f"{signature_meta['source']}.{signature}",
-                        type="SURICATA",
-                        malware_families=signature_details["malware_family"] or None,
-                        attributes=attributes,
-                        signature_id=signature_id,
-                        classification=classification,
-                    ),
+                    data={"name": f"{signature_meta['source']}.{signature}",
+                          "type": "SURICATA",
+                          "malware_families": signature_details["malware_family"] or None,
+                          "attributes": attributes,
+                          "signature_id": signature_id,
+                          "classification": classification},
                 )
 
         # Add the original Suricata output as a supplementary file in the result

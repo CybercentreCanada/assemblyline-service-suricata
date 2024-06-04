@@ -210,7 +210,7 @@ def parse_suricata_output(
             if any(record.get(event_type) for event_type in ["http", "dns", "flow"]) and flow_id:
                 attributes = []
                 for source in oid_lookup.get(flow_id, []):
-                    attribute = dict(source=source)
+                    attribute = {"source": source}
                     if not regex.match(IP_ONLY_REGEX, ext_hostname):
                         attribute["domain"] = ext_hostname
                     if record.get("http") and record["http"].get("hostname"):
@@ -292,14 +292,14 @@ def parse_suricata_output(
                         sha256_full,
                     ),
                 }
-    return dict(
-        alerts=alerts,
-        signatures=signatures,
-        domains=domains,
-        ips=ips,
-        urls=urls,
-        email_addresses=email_addresses,
-        tls=tls_dict,
-        extracted_files=extracted_files.values(),
-        reverse_lookup=reverse_lookup,
-    )
+    return {
+        "alerts": alerts,
+        "signatures": signatures,
+        "domains": domains,
+        "ips": ips,
+        "urls": urls,
+        "email_addresses": email_addresses,
+        "tls": tls_dict,
+        "extracted_files": extracted_files.values(),
+        "reverse_lookup": reverse_lookup,
+    }

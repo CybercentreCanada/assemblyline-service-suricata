@@ -37,16 +37,16 @@ class SuricataUpdateServer(ServiceUpdater):
                         break
                 signatures.append(
                     Signature(
-                        dict(
-                            classification=classification,
-                            data=rule_signature.raw,
-                            name=name,
-                            revision=int(float(rule_signature.rev)),
-                            signature_id=rule_signature.sid,
-                            source=source_name,
-                            status=status,
-                            type="suricata",
-                        )
+                        {
+                            "classification": classification,
+                            "data": rule_signature.raw,
+                            "name": name,
+                            "revision": int(float(rule_signature.rev)),
+                            "signature_id": rule_signature.sid,
+                            "source": source_name,
+                            "status": status,
+                            "type": "suricata",
+                        }
                     )
                 )
 
