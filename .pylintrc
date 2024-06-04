@@ -574,9 +574,9 @@ max-statements=50
 min-public-methods=2
 
 
-[EXCEPTIONS]
+; [EXCEPTIONS]
 
-# Exceptions that will emit a warning when being caught. Defaults to
-# "BaseException, Exception".
-overgeneral-exceptions=BaseException,
-                       Exception
+; # Exceptions that will emit a warning when being caught. Defaults to
+; # "BaseException, Exception".
+; overgeneral-exceptions=BaseException,
+;                        Exception
