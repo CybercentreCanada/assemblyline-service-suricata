@@ -2,6 +2,7 @@ ARG branch=latest
 FROM cccs/assemblyline-v4-service-base:$branch AS base
 
 ENV SERVICE_PATH suricata_.suricata_.Suricata
+ENV SURICATA_VERSION 0.8-dev
 ENV SURICATA_COMMIT a10c1f1dded570f99c4972ef9f730cec79218b75
 
 USER root
