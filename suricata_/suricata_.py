@@ -33,12 +33,12 @@ class Suricata(ServiceBase):
 
         self.home_net = self.config.get("home_net", "any")
         self.rules_config = yaml.safe_dump({"rule-files": []})
-        self.run_dir = "/var/run/suricata"
+        self.run_dir = "/usr/local/var/run/suricata"
         self.suricata_socket = None
         self.suricata_sc = None
         self.suricata_process = None
-        self.suricata_yaml = "/etc/suricata/suricata.yaml"
-        self.suricata_log = "/var/log/suricata/suricata.log"
+        self.suricata_yaml = "/usr/local/etc/suricata/suricata.yaml"
+        self.suricata_log = "/usr/local/var/log/suricata/suricata.log"
         self.uses_proxy_in_sandbox = self.config.get("uses_proxy_in_sandbox", False)
         self.suricata_conf = self.config.get("suricata_conf", {})
 
