@@ -89,21 +89,18 @@ RUN mkdir -p /mount/updates && chown -R assemblyline /mount/updates
 
 # Update suricata config
 COPY suricata_/conf/suricata.yaml /usr/local/etc/suricata/
-RUN chown assemblyline /usr/local/etc/suricata/suricata.yaml
 RUN sed -i -e 's/__HOME_NET__/any/g' /usr/local/etc/suricata/suricata.yaml
 RUN sed -i -e 's/\/var\/run\/suricata/\/usr\/local\/var\/run\/suricata\//g' /usr/local/etc/suricata/suricata.yaml
 RUN sed -i -e 's/\/etc\/suricata\//\/usr\/local\/etc\/suricata\//g' /usr/local/etc/suricata/suricata.yaml
 RUN sed -i -e 's/\/var\/log\/suricata\//\/usr\/local\/var\/log\/suricata\//g' /usr/local/etc/suricata/suricata.yaml
 RUN sed -i -e 's/__RULE_FILES__/rule-files: []/g' /usr/local/etc/suricata/suricata.yaml
 
+RUN touch /usr/local/etc/suricata/suricata-rules-update
+
+RUN chown -R assemblyline /usr/local/etc/suricata
 RUN chown -R assemblyline /usr/local/var/lib/suricata
 RUN chown -R assemblyline /usr/local/var/log/suricata
 RUN chown -R assemblyline /usr/local/var/run/suricata
-
-
-# Update local rules using suricata-update script here
-RUN touch /usr/local/etc/suricata/suricata-rules-update
-RUN chown -R assemblyline /usr/local/var/lib/suricata/
 RUN chown assemblyline /usr/local/etc/suricata/suricata-rules-update
 
 # Switch to assemblyline user
