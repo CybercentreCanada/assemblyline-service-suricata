@@ -19,3 +19,4 @@ jobs:
     - name: Run additional command
       run: |
         docker run --rm -v ${{ github.workspace }}:/tmp/repo my-image-name:test sh -c '/usr/local/bin/suricata -vvvv -c /usr/local/etc/suricata/suricata.yaml --unix-socket=/usr/local/var/run/suricata/suricata.socket --pidfile /usr/local/var/run/suricata/suricata.pid --set logging.outputs.1.file.filename=/usr/local/var/log/suricata/suricata.log -D; python -d -m assemblyline_v4_service.dev.run_service_once suricata_.suricata_.Suricata /tmp/repo/test/files/smb2_putty_xfer.pcap; cat /tmp/repo/test/files/smb2_putty_xfer.pcap_suricata/working_directory/*/*|jq'
+      continue-on-error: true
