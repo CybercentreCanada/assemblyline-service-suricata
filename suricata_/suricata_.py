@@ -14,13 +14,12 @@ from retrying import RetryError, retry
 from assemblyline.common.exceptions import RecoverableError
 from assemblyline.common.forge import get_classification
 from assemblyline.common.str_utils import safe_str
-from assemblyline.odm.base import DOMAIN_ONLY_REGEX, IP_ONLY_REGEX
-from assemblyline.odm.models.ontology.results import NetworkConnection, Signature
-from assemblyline_service_utilities.common.network_helper import convert_url_to_https
+from assemblyline.odm.base import DOMAIN_ONLY_REGEX
+from assemblyline.odm.models.ontology.results import Signature
 from assemblyline_v4_service.common.base import ServiceBase
 from assemblyline_v4_service.common.request import MaxExtractedExceeded
 from assemblyline_v4_service.common.result import BODY_FORMAT, Result, ResultSection
-from assemblyline_v4_service.common.task import PARENT_RELATION
+
 
 from suricata_.helper import parse_suricata_output
 
@@ -172,7 +171,7 @@ class Suricata(ServiceBase):
             try:
                 self.launch_or_load_suricata()
             except RetryError as retry_error:
-                raise RecoverableError(retry_error)
+                raise RecoverableError(retry_error) from retry_error
 
     # Try connecting to the Suricata socket
     def suricata_running(self):
@@ -269,8 +268,9 @@ class Suricata(ServiceBase):
                 ret = self.suricata_sc.send_command("pcap-current")
                 if ret and ret["message"] == "None":
                     break
-            except ConnectionResetError as connectionreseterrror:
-                raise RecoverableError(connectionreseterrror)
+            except ConnectionResetError as connection_reset_error:
+                raise RecoverableError(
+                    connection_reset_error) from connection_reset_error
 
         # Bring back stdout and stderr
         sys.stdout = old_stdout
@@ -310,7 +310,8 @@ class Suricata(ServiceBase):
                                 "file.name.extracted", filename)
                 except FileNotFoundError as file_not_found_error:
                     # An intermittent issue, just try again
-                    raise RecoverableError(file_not_found_error)
+                    raise RecoverableError(
+                        file_not_found_error) from file_not_found_error
                 except MaxExtractedExceeded:
                     # We've hit our limit
                     pass
@@ -454,18 +455,18 @@ class Suricata(ServiceBase):
                     if dest_ip in reverse_lookup.keys():
                         section.add_tag("network.dynamic.domain",
                                         reverse_lookup[dest_ip])
-                    [
-                        section.add_tag("network.dynamic.uri", uri)
-                        for uri in urls
-                        if dest_ip in uri or (reverse_lookup.get(dest_ip) and reverse_lookup[dest_ip] in uri)
-                    ]
+                    uri_tags = [uri for uri in urls if dest_ip in uri or reverse_lookup.get(
+                        dest_ip) and reverse_lookup[dest_ip] in uri]
+                    for uri_tag in uri_tags:
+                        section.add_tag("network.dynamic.uri", uri_tag)
 
                 # Add a tag for the signature id and the message
                 section.add_tag(
                     "network.signature.signature_id", str(signature_id))
                 section.add_tag("network.signature.message", signature)
-                [section.add_tag("network.static.uri", attr["uri"])
-                 for attr in attributes if attr.get("uri")]
+                for attr in attributes:
+                    if attr.get("uri"):
+                        section.add_tag("network.static.uri", attr["uri"])
                 # Tag malware_family
                 for malware_family in signature_details["malware_family"]:
                     section.add_tag("attribution.family", malware_family)

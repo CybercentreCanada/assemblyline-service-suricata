@@ -15,10 +15,12 @@ from assemblyline_v4_service.common.task import PARENT_RELATION
 
 def parse_suricata_output(
     working_directory: str,
-    temp_submission_data: Dict[str, Any] = {},
+    temp_submission_data: Dict[str, Any] = None,
     uses_proxy_in_sandbox: bool = False,
     ontology: OntologyHelper = OntologyHelper(None, None),
 ):
+    if temp_submission_data is None:
+        temp_submission_data = {}
     alerts = {}
     signatures = {}
     domains = []
@@ -31,7 +33,8 @@ def parse_suricata_output(
     ancestry = temp_submission_data.setdefault("ancestry", [])
 
     from_proxied_sandbox = (
-        any([a[-1]["parent_relation"] == PARENT_RELATION.DYNAMIC for a in ancestry]) and uses_proxy_in_sandbox
+        any(a[-1]["parent_relation"] ==
+            PARENT_RELATION.DYNAMIC for a in ancestry) and uses_proxy_in_sandbox
     )
 
     reverse_lookup = {}
@@ -49,7 +52,7 @@ def parse_suricata_output(
     def attach_network_connection(data: dict):
         # Check for any fields that may be null and remove them from the data before applying validation
         for k in list(data.keys()):
-            if data.get(k) == None:
+            if data.get(k) is None:
                 data.pop(k)
 
         oid = NetworkConnection.get_oid(data)
@@ -63,14 +66,15 @@ def parse_suricata_output(
             oid_lookup.setdefault(flow_id, []).append(data["objectid"])
 
     # Parse the json results of the service and organize them into certain categories
-    for line in open(os.path.join(working_directory, "eve.json")):
-        record = json.loads(line)
-        if record["event_type"] in event_types.keys():
-            event_types[record["event_type"]].append(record)
+    with open(os.path.join(working_directory, "eve.json"), encoding="utf-8") as file:
+        for line in file:
+            record = json.loads(line)
+            if record["event_type"] in event_types:
+                event_types[record["event_type"]].append(record)
 
     ordered_records = []
-    [ordered_records.extend(record) for record in event_types.values()]
-
+    for record in event_types.values():
+        ordered_records.extend(record)
     # Populate reverse lookup map
     for record in event_types["dns"]:
         domain = record["dns"]["rrname"]
@@ -121,7 +125,8 @@ def parse_suricata_output(
             if domain not in domains and domain not in ips:
                 domains.append(domain)
 
-            protocol = "https" if record["http"].get("http_port") == 443 else "http"
+            protocol = "https" if record["http"].get(
+                "http_port") == 443 else "http"
             url_meta = record["http"]["url"]
             if url_meta.startswith("/"):
                 # Assume this is a path
@@ -133,7 +138,8 @@ def parse_suricata_output(
                 # Assume this ia a URL without the protocol, default to http
                 url = f"{protocol}://" + url_meta
 
-            url = convert_url_to_https(record["http"].get("http_method", "GET"), url) if from_proxied_sandbox else url
+            url = convert_url_to_https(record["http"].get(
+                "http_method", "GET"), url) if from_proxied_sandbox else url
             if url not in urls:
                 urls.append(url)
             network_data["connection_type"] = "http"
@@ -149,10 +155,12 @@ def parse_suricata_output(
                 },
             }
             temp_submission_data["url_headers"].update(
-                {url: {h["name"]: h["value"] for h in http_details["request_headers"]}}
+                {url: {h["name"]: h["value"]
+                       for h in http_details["request_headers"]}}
             )
             if http_details.get("status"):
-                network_data["http_details"].update({"response_status_code": http_details["status"]})
+                network_data["http_details"].update(
+                    {"response_status_code": http_details["status"]})
             attach_network_connection(network_data)
 
         elif record["event_type"] == "dns":
@@ -199,7 +207,7 @@ def parse_suricata_output(
                     "attributes": [],
                 }
 
-            if any([record.get(event_type) for event_type in ["http", "dns", "flow"]]) and flow_id:
+            if any(record.get(event_type) for event_type in ["http", "dns", "flow"]) and flow_id:
                 attributes = []
                 for source in oid_lookup.get(flow_id, []):
                     attribute = dict(source=source)
@@ -216,25 +224,29 @@ def parse_suricata_output(
                         else:
                             url = f"{app_proto}://{hostname+record['http']['url']}"
                         url = (
-                            convert_url_to_https(record["http"].get("http_method", "GET"), url)
+                            convert_url_to_https(
+                                record["http"].get("http_method", "GET"), url)
                             if from_proxied_sandbox
                             else url
                         )
                         attribute.update({"uri": url})
                     elif record.get("dns"):
                         # Only attach network results that are directly related to the alert
-                        network_part: NetworkConnection = ontology._result_parts.get(source['ontology_id'])
-                        if not any([query["rrname"] == network_part.dns_details.domain \
-                                    for query in record["dns"]["query"]]):
+                        network_part: NetworkConnection = ontology._result_parts.get(
+                            source['ontology_id'])
+                        if not any(query["rrname"] == network_part.dns_details.domain
+                                   for query in record["dns"]["query"]):
                             continue
                     attributes.append(attribute)
 
                 if attributes:
                     signatures[signature_key]["attributes"] = (
-                        signatures[signature_key].get("attributes", []) + attributes
+                        signatures[signature_key].get(
+                            "attributes", []) + attributes
                     )
 
-            alerts[signature_key].append((timestamp, src_ip, src_port, dest_ip, dest_port))
+            alerts[signature_key].append(
+                (timestamp, src_ip, src_port, dest_ip, dest_port))
 
         elif record["event_type"] == "smtp":
             # extract email metadata
@@ -268,7 +280,7 @@ def parse_suricata_output(
 
         elif record["event_type"] == "fileinfo":
             sha256_full = record["fileinfo"]["sha256"]
-            if sha256_full not in extracted_files.keys():
+            if sha256_full not in extracted_files:
                 sha256 = f"{sha256_full[:12]}.data"
                 extracted_files[sha256_full] = {
                     "sha256": sha256,
