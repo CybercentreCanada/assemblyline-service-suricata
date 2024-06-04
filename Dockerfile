@@ -22,14 +22,8 @@ FROM base AS build
 # Install PIP dependancies
 USER assemblyline
 RUN touch /tmp/before-pip
-RUN pip install --no-cache-dir --user \
-  assemblyline-service-utilities \
-  simplejson \
-  python-dateutil \
-  suricata-update \
-  suricataparser \
-  async_timeout \
-  retrying && rm -rf ~/.cache/pip
+COPY requirements.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir --user -r /tmp/requirements.txt && rm -rf ~/.cache/pip
 
 #Installing cargo as assemblyline user
   
