@@ -2,7 +2,7 @@ ARG branch=latest
 FROM cccs/assemblyline-v4-service-base:$branch AS base
 
 ENV SERVICE_PATH suricata_.suricata_.Suricata
-ENV SURICATA_VERSION 7.0.5
+ENV SURICATA_COMMIT a10c1f1dded570f99c4972ef9f730cec79218b75
 
 USER root
 
@@ -43,6 +43,7 @@ RUN mkdir -p /suricata
 WORKDIR /suricata
 RUN git clone https://github.com/OISF/suricata.git
 WORKDIR /suricata/suricata
+RUN git checkout ${SURICATA_COMMIT}
 RUN ./scripts/bundle.sh
 RUN ./autogen.sh
 RUN ./configure
