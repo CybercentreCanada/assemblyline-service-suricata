@@ -203,6 +203,7 @@ class Suricata(ServiceBase):
                 f"{self.run_dir}/suricata.pid",
                 "--set",
                 f"logging.outputs.1.file.filename={self.suricata_log}",
+                "-D",
             ]
 
             self.log.info(f"Launching Suricata: {' '.join(command)}")

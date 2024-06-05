@@ -52,7 +52,7 @@ vars:
 # The default logging directory.  Any log or output file will be
 # placed here if its not specified with a full path name. This can be
 # overridden with the -l command line parameter.
-default-log-dir: /var/log/suricata/
+default-log-dir: /usr/local/var/log/suricata
 
 # global stats configuration
 stats:
@@ -605,7 +605,7 @@ logging:
   - file:
       enabled: yes
       level: info
-      filename: /var/log/suricata/suricata.log
+      filename: /usr/local/var/log/suricata/suricata/suricata.log
       # type: json
   - syslog:
       enabled: no
