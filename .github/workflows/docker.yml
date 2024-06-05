@@ -12,11 +12,6 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-    - name: Configurar caché
-      uses: actions/cache@v2
-      with:
-        path: /home/runner/.cache/docker
-        key: ${{ runner.os }}-docker-${{ hashFiles('Dockerfile') }}
     - name: Build the Docker image
       uses: docker/build-push-action@v5
       with:
@@ -24,21 +19,14 @@ jobs:
         file: Dockerfile
         push: false
         tags: my-image-name:test
-      env:
-        CACHE_KEY: ${{ runner.os }}-docker-${{ hashFiles('Dockerfile') }}
-      run: |
-        echo "::set-output name=cache::${CACHE_KEY}"
-      
     - name: Change the permission to the volume
       run: sudo chmod -R 777 ${{ github.workspace }}
     - name: Run additional command
       run: |
         docker run --rm -v ${{ github.workspace }}:/tmp/repo my-image-name:test sh -c '/usr/local/bin/suricata -vvvv -c /usr/local/etc/suricata/suricata.yaml --unix-socket=/usr/local/var/run/suricata/suricata.socket --pidfile /usr/local/var/run/suricata/suricata.pid --set logging.outputs.1.file.filename=/usr/local/var/log/suricata/suricata.log -D; python -d -m assemblyline_v4_service.dev.run_service_once suricata_.suricata_.Suricata /tmp/repo/test/files/smb2_putty_xfer.pcap'
-      continue-on-error: true
     - name: Build results tar.gz
       run: |
         sudo tar cvzf results.tar.gz ${{ github.workspace }}/test/files/smb2_putty_xfer.pcap_suricata
-      continue-on-error: true
     - name: Generate artifact with running results
       uses: actions/upload-artifact@v4
       with:
