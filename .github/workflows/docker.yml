@@ -22,13 +22,13 @@ jobs:
       continue-on-error: true
     - name: Build results tar.gz
       run: |
-        tar cvzf results.tar.gz ${{ github.workspace }}/test/files/smb2_putty_xfer.pcap_suricata/working_directory
+        sudo tar cvzf results.tar.gz ${{ github.workspace }}/test/files/smb2_putty_xfer.pcap_suricata/working_directory
       continue-on-error: true
-    - name: Generate artifact
-      uses: actions/upload-artifact@v2
-      with:
-        name: suricata-output
-        path: ${{ github.workspace }}/test/files/smb2_putty_xfer.pcap_suricata/working_directory/*/*
+    # - name: Generate artifact
+    #   uses: actions/upload-artifact@v2
+    #   with:
+    #     name: suricata-output
+    #     path: ${{ github.workspace }}/test/files/smb2_putty_xfer.pcap_suricata/working_directory/*/*
     - name: Generate artifact 2
       uses: actions/upload-artifact@v2
       with:
