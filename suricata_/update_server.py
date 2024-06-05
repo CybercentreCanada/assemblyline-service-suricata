@@ -72,7 +72,7 @@ class SuricataUpdateServer(ServiceUpdater):
             # Parse and update rules with GID
             updated_rules = []
             for rule in parse_file(source_path):
-                rule.add_option("gid", gid)
+                rule.add_option("gid", str(gid))
                 updated_rules.append(rule.build_rule())
 
             # Write updated rules back to disk
