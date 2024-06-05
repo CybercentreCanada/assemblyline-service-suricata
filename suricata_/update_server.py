@@ -50,10 +50,8 @@ class SuricataUpdateServer(ServiceUpdater):
                     )
                 )
 
-        total_imported = self.client.signature.add_update_many(
-            source_name, self.updater_type, signatures)["success"]
-        self.log.info(
-            f"{total_imported} signatures were imported for source {source_name}")
+        total_imported = self.client.signature.add_update_many(source_name, self.updater_type, signatures)["success"]
+        self.log.info(f"{total_imported} signatures were imported for source {source_name}")
 
     def serve_directory(self, new_directory: str, new_time: str):
         self.log.info("Update finished with new data.")
@@ -88,12 +86,12 @@ class SuricataUpdateServer(ServiceUpdater):
                 query=self.signatures_query, fl="classification,source,status,signature_id,name", as_obj=False
             )
         }
-        with open(os.path.join(new_directory, SIGNATURES_META_FILENAME),"w") as sig_file_handler:
+        with open(os.path.join(new_directory, SIGNATURES_META_FILENAME), "w") as sig_file_handler:
             sig_file_handler.write(json.dumps(signature_map, indent=2))
 
         try:
             # Tar update directory
-            with  tempfile.NamedTemporaryFile(
+            with tempfile.NamedTemporaryFile(
                 prefix="signatures_", dir=UPDATER_DIR, suffix=".tar.bz2", delete=False
             ) as new_tar:
                 new_tar.close()
@@ -108,11 +106,10 @@ class SuricataUpdateServer(ServiceUpdater):
                 self._time_keeper, new_time = new_time, self._time_keeper
 
             # Write the new status file
-            with  tempfile.NamedTemporaryFile("w+", delete=False, dir="/tmp") as temp_status:
+            with tempfile.NamedTemporaryFile("w+", delete=False, dir="/tmp") as temp_status:
                 json.dump(self.status(), temp_status.file)
                 os.rename(temp_status.name, STATUS_FILE)
-            self.log.info(
-                f"Now serving: {self._update_dir} and {self._update_tar} ({self.get_local_update_time()})")
+            self.log.info(f"Now serving: {self._update_dir} and {self._update_tar} ({self.get_local_update_time()})")
         finally:
             if new_tar and os.path.exists(new_tar):
                 self.log.info(f"Remove old tar file: {new_tar}")
@@ -129,8 +126,7 @@ class SuricataUpdateServer(ServiceUpdater):
             for file in os.listdir(UPDATER_DIR):
                 file_path = os.path.join(UPDATER_DIR, file)
                 if (
-                    (file.startswith("signatures_")
-                     and file_path != self._update_tar)
+                    (file.startswith("signatures_") and file_path != self._update_tar)
                     or (file.startswith("time_keeper_") and file_path != self._time_keeper)
                     or (file.startswith("update_dir_") and file_path != self._update_dir)
                 ):
