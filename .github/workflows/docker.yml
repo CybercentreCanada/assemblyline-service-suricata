@@ -12,6 +12,11 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+    - name: Configurar caché
+      uses: actions/cache@v2
+        with:
+          path: /home/runner/.cache/docker
+          key: ${{ runner.os }}-docker-${{ hashFiles('Dockerfile') }}
     - name: Build the Docker image
       uses: docker/build-push-action@v5
       with:
@@ -20,8 +25,10 @@ jobs:
         push: false
         tags: my-image-name:test
       env:
-        CACHE_KEY: ${{ runner.os }}-${{ hashFiles('**/Dockerfile') }}
-      id: docker_build  
+        CACHE_KEY: ${{ runner.os }}-${{ hashFiles('Dockerfile') }}
+      run: |
+        echo "::set-output name=cache::${CACHE_KEY}"
+      
     - name: Change the permission to the volume
       run: sudo chmod -R 777 ${{ github.workspace }}
     - name: Run additional command

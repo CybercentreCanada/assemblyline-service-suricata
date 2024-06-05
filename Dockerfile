@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y wget curl\
   libcap-ng-dev libcap-ng0 make libmagic-dev libjansson-dev\
   libnss3-dev libgeoip-dev liblua5.1-dev libhiredis-dev libevent-dev \
   rustc cargo autoconf libpcre2-dev\
-  libtool jq git-core automake\
+  libtool jq git-core automake liblz4-dev\
   && rm -rf /var/lib/apt/lists/*
 
 FROM base AS build
