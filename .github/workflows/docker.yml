@@ -22,7 +22,8 @@ jobs:
       continue-on-error: true
     - name: Build results tar.gz
       run: |
-        tar cvzf results.tar.gz ${{ github.workspace }}/test/files/smb2_putty_xfer.pcap_suricata/working_directory/*/*"      continue-on-error: true
+        tar cvzf results.tar.gz ${{ github.workspace }}/test/files/smb2_putty_xfer.pcap_suricata/working_directory
+      continue-on-error: true
     - name: Generate artifact
       uses: actions/upload-artifact@v2
       with:
