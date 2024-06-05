@@ -25,7 +25,7 @@ jobs:
         push: false
         tags: my-image-name:test
       env:
-        CACHE_KEY: ${{ runner.os }}-${{ hashFiles('Dockerfile') }}
+        CACHE_KEY: ${{ runner.os }}-docker-${{ hashFiles('Dockerfile') }}
       run: |
         echo "::set-output name=cache::${CACHE_KEY}"
       
