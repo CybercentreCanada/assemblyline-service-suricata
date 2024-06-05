@@ -1,0 +1,34 @@
+name: Docker Image CI
+
+on:
+  push:
+    tags:
+        - test-*
+jobs:
+
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Build the Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: Dockerfile
+        push: false
+        tags: my-image-name:test
+    - name: Change the permission to the volume
+      run: sudo chmod -R 777 ${{ github.workspace }}
+    - name: Run additional command
+      run: |
+        docker run --rm -v ${{ github.workspace }}:/tmp/repo my-image-name:test sh -c 'python -d -m assemblyline_v4_service.dev.run_service_once suricata_.suricata_.Suricata /tmp/repo/test/files/smb2_putty_xfer.pcap'
+    - name: Build results tar.gz
+      run: |
+        sudo tar cvzf results.tar.gz ${{ github.workspace }}/test/files/smb2_putty_xfer.pcap_suricata
+    - name: Generate artifact with running results
+      uses: actions/upload-artifact@v4
+      with:
+        name: suricata-output
+        path: results.tar.gz 

@@ -15,3 +15,9 @@ The ruleset(s) configured by default for use with this service are:
 - [URLhaus](https://urlhaus.abuse.ch/downloads/urlhaus_suricata.tar.gz)
 
 Organizations can add their own rulesets to this service.
+
+## Test if working
+
+ Just inside the container run:
+ 
+        python -m assemblyline_v4_service.dev.run_service_once suricata_.suricata_.Suricata /tmp/testing.pcap

@@ -1,0 +1,7 @@
+assemblyline-service-utilities
+simplejson
+python-dateutil
+suricata-update
+suricataparser
+async_timeout
+retrying
