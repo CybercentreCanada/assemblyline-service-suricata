@@ -144,15 +144,15 @@ def parse_suricata_output(
             network_data["http_details"] = {
                 "request_uri": url,
                 "request_headers": {
-                    h["name"].replace("-", "_").lower(): h["value"] for h in http_details["request_headers"]
+                    h["name"].replace("-", "_").lower(): h["value"] for h in http_details.get("request_headers", [])
                 },
-                "request_method": http_details["http_method"].upper(),
+                "request_method": http_details.get("http_method", "").upper(),
                 "response_headers": {
-                    h["name"].replace("-", "_").lower(): h["value"] for h in http_details["response_headers"]
+                    h["name"].replace("-", "_").lower(): h["value"] for h in http_details.get("response_headers", [])
                 },
             }
             temp_submission_data["url_headers"].update(
-                {url: {h["name"]: h["value"] for h in http_details["request_headers"]}}
+                {url: {h["name"]: h["value"] for h in http_details.get("request_headers",[])}}
             )
             if http_details.get("status"):
                 network_data["http_details"].update({"response_status_code": http_details["status"]})
