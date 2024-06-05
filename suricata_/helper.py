@@ -155,7 +155,7 @@ def parse_suricata_output(
                 {url: {h["name"]: h["value"] for h in http_details.get("request_headers",[])}}
             )
             if http_details.get("status"):
-                network_data["http_details"].update({"response_status_code": http_details["status"]})
+                network_data["http_details"].update({"response_status_code": http_details.get("status")})
             attach_network_connection(network_data)
 
         elif record["event_type"] == "dns":
