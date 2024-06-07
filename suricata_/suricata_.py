@@ -1,16 +1,13 @@
 import json
 import os
 import subprocess
-
 import sys
 import time
 from io import StringIO
+
 import regex
 import suricatasc
 import yaml
-
-from retrying import RetryError, retry
-
 from assemblyline.common.exceptions import RecoverableError
 from assemblyline.common.forge import get_classification
 from assemblyline.common.str_utils import safe_str
@@ -19,7 +16,7 @@ from assemblyline.odm.models.ontology.results import Signature
 from assemblyline_v4_service.common.base import ServiceBase
 from assemblyline_v4_service.common.request import MaxExtractedExceeded
 from assemblyline_v4_service.common.result import BODY_FORMAT, Result, ResultSection
-
+from retrying import RetryError, retry
 
 from suricata_.helper import parse_suricata_output
 
@@ -379,7 +376,6 @@ class Suricata(ServiceBase):
                 elif tls_type == "ja3":
                     kv_body.setdefault("ja3_hash", [])
                     kv_body.setdefault("ja3_string", [])
-
                     for ja3_entry in tls_values:
                         ja3_hash = ja3_entry.get("hash")
                         ja3_string = ja3_entry.get("string")
@@ -389,6 +385,27 @@ class Suricata(ServiceBase):
                         if ja3_string:
                             kv_body["ja3_string"].append(ja3_string)
                             tls_section.add_tag("network.tls.ja3_string", ja3_string)
+
+                elif tls_type == "ja3s":
+                    kv_body.setdefault("ja3s_hash", [])
+                    kv_body.setdefault("ja3s_string", [])
+                    for ja3s_entry in tls_values:
+                        ja3s_hash = ja3s_entry.get("hash")
+                        ja3s_string = ja3s_entry.get("string")
+                        if ja3s_hash:
+                            kv_body["ja3s_hash"].append(ja3s_hash)
+                            tls_section.add_tag("network.tls.ja3s_hash", ja3s_hash)
+                        if ja3s_string:
+                            kv_body["ja3s_string"].append(ja3s_string)
+                            tls_section.add_tag("network.tls.ja3s_string", ja3_string)
+
+                elif tls_type == "ja4":
+                    kv_body.setdefault("ja4_hash", [])
+                    for ja4_entry in tls_values:
+                        ja4_hash = ja4_entry
+                        if ja4_hash:
+                            kv_body["ja4_hash"].append(ja4_hash)
+                            tls_section.add_tag("network.tls.ja4_hash", ja4_hash)
 
                 else:
                     kv_body[tls_type] = tls_values
