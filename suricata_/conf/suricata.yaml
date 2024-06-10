@@ -780,6 +780,7 @@ app-layer:
 
       # Generate JA3 fingerprint from client hello
       ja3-fingerprints: yes
+      ja4-fingerprints: yes
 
       # What to do when the encrypted communications start:
       # - default: keep tracking TLS session, check for protocol anomalies,
