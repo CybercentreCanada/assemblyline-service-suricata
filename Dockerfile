@@ -19,15 +19,13 @@ RUN apt-get update && apt-get install -y wget curl\
 
 FROM base AS build
 
-# Install rustup (purge rustc)
 # Install PIP dependancies
 USER assemblyline
 RUN touch /tmp/before-pip
 COPY requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir --user -r /tmp/requirements.txt && rm -rf ~/.cache/pip
 
-#Installing cargo as assemblyline user
-  
+# Installing cargo as assemblyline user
 
 # Install rustup (purge rustc)
 USER root
@@ -47,37 +45,26 @@ WORKDIR /suricata/suricata
 RUN git checkout ${SURICATA_COMMIT}
 RUN ./scripts/bundle.sh
 RUN ./autogen.sh
-RUN ./configure
+RUN ./configure --disable-gccmarch-native
 RUN make
 RUN DESTDIR=/suricata/suricata/fakeroot make install install-conf
 RUN ldconfig
- 
-# 
-
-# # # Install suricata pip package This is not needed anymore
-# # #ENV PATH="/build/bin:$PATH"
-# # #RUN make install -C /tmp/suricata-${SURICATA_VERSION}/python install-exec-local
-
 
 # Install stripe
 COPY suricata_/stripe/* /tmp/stripe/
 RUN mkdir -p /build/bin
 RUN /usr/bin/gcc -o /build/bin/stripe /tmp/stripe/stripe.c
 
-# # # Remove files that existed before the pip install so that our copy command below doesn't take a snapshot of
-# # # files that already exist in the base image
+# Remove files that existed before the pip install so that our copy command below doesn't take a snapshot of
+# files that already exist in the base image
 RUN find /var/lib/assemblyline/.local -type f ! -newer /tmp/before-pip -delete
 
-# # # Switch back to root and change the ownership of the files to be copied due to bitbucket pipeline uid nonsense
+# Switch back to root and change the ownership of the files
 RUN chown root:root -R /var/lib/assemblyline/.local
 
 FROM base
-# # #tengo q cmaiar la logica poirque ahora ya esta instalado no es cmoo antes
-
-# # # # Get the updated local dir from builder
-# COPY --from=build /suricata/suricata /suricata/suricata
+# Get the updated local dir from builder
 COPY --chown=assemblyline:assemblyline --from=build /var/lib/assemblyline/.local /var/lib/assemblyline/.local
-# COPY --chown=assemblyline:assemblyline --from=build /var/lib/assemblyline/.local /var/lib/assemblyline/.local
 COPY --from=build /suricata/suricata/fakeroot /
 COPY --from=build /build/bin/stripe /usr/local/bin/stripe
 RUN ldconfig
