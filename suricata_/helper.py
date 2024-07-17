@@ -204,7 +204,8 @@ def parse_suricata_output(
 
             if any(record.get(event_type) for event_type in ["http", "dns", "flow"]) and flow_id:
                 attributes = []
-                for source in oid_lookup.get(flow_id, []):
+                sources = oid_lookup.get(flow_id, [])
+                for source in sources:
                     attribute = {"source": source}
                     network_part: NetworkConnection = ontology._result_parts.get(source["ontology_id"])
                     if not regex.match(IP_ONLY_REGEX, ext_hostname):
@@ -213,25 +214,34 @@ def parse_suricata_output(
                         # Only alerts containing HTTP details can provide URI-relevant information
                         http_record = record["http"]
                         network_part_http_details = network_part.http_details
+
+                        if (
+                            "content_range" in http_record
+                            and http_record["content_range"]["raw"]
+                            != network_part_http_details.response_headers["content_range"]
+                        ):
+                            # Content range doesn't match
+                            continue
+                        elif (
+                            "http_user_agent" in http_record
+                            and http_record["http_user_agent"]
+                            != network_part_http_details.request_headers["user_agent"]
+                        ):
+                            # User agent doesn't match
+                            continue
+                        elif (
+                            "http_content_type" in http_record
+                            and http_record["http_content_type"]
+                            != network_part_http_details.response_headers["content_type"]
+                        ):
+                            # Content type doesn't match
+                            continue
+
                         if not (
                             http_record["http_method"] == network_part_http_details.request_method
                             and http_record["status"] == network_part_http_details.response_status_code
-                            and (
-                                "http_user_agent" in http_record
-                                and http_record["http_user_agent"]
-                                == network_part_http_details.request_headers["user_agent"]
-                            )
-                            and (
-                                "http_content_type" in http_record
-                                and http_record["http_content_type"]
-                                == network_part_http_details.response_headers["content_type"]
-                            )
-                            and (
-                                "content_range" in http_record
-                                and http_record["content_range"]["raw"]
-                                == network_part_http_details.response_headers["content_range"]
-                            )
                         ):
+                            # Request method or status code doesn't match
                             continue
 
                         hostname = reverse_lookup.get(
