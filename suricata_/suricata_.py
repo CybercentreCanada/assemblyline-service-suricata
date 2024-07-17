@@ -16,7 +16,7 @@ from assemblyline.odm.models.ontology.results import Signature
 from assemblyline_v4_service.common.base import ServiceBase
 from assemblyline_v4_service.common.request import MaxExtractedExceeded
 from assemblyline_v4_service.common.result import BODY_FORMAT, Result, ResultSection
-from tenacity import RetryError, retry
+from tenacity import RetryError, retry, retry_if_result, wait_exponential, stop_after_delay
 
 from suricata_.helper import parse_suricata_output
 
@@ -177,10 +177,9 @@ class Suricata(ServiceBase):
 
     # Retry with exponential backoff until we can actually connect to the Suricata socket
     @retry(
-        retry_on_result=lambda x: x is False,
-        wait_exponential_multiplier=1000,
-        wait_exponential_max=10000,
-        stop_max_delay=120000,
+        retry=retry_if_result(lambda x: x is False),
+        wait=wait_exponential(multiplier=1000, max=10000),
+        stop=stop_after_delay(120000)
     )
     def suricata_running_retry(self):
         return self.suricata_running()
