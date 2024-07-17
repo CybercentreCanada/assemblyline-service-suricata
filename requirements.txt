@@ -4,4 +4,4 @@ python-dateutil
 suricata-update
 suricataparser
 async_timeout
-retrying
+tenacity
