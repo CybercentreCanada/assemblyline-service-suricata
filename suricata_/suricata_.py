@@ -179,7 +179,7 @@ class Suricata(ServiceBase):
     @retry(
         retry=retry_if_result(lambda x: x is False),
         wait=wait_exponential(multiplier=1000, max=10000),
-        stop=stop_after_delay(120000)
+        stop=stop_after_delay(120000),
     )
     def suricata_running_retry(self):
         return self.suricata_running()
