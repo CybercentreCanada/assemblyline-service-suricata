@@ -16,7 +16,7 @@ from assemblyline.odm.models.ontology.results import Signature
 from assemblyline_v4_service.common.base import ServiceBase
 from assemblyline_v4_service.common.request import MaxExtractedExceeded
 from assemblyline_v4_service.common.result import BODY_FORMAT, Result, ResultSection
-from retrying import RetryError, retry
+from tenacity import RetryError, retry
 
 from suricata_.helper import parse_suricata_output
 
