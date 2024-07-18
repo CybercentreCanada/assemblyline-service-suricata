@@ -152,7 +152,7 @@ def parse_suricata_output(
                 },
             }
             temp_submission_data["url_headers"].update(
-                {url: {h["name"]: h["value"] for h in http_details.get("request_headers",[])}}
+                {url: {h["name"]: h["value"] for h in http_details.get("request_headers", [])}}
             )
             if http_details.get("status"):
                 network_data["http_details"].update({"response_status_code": http_details.get("status")})
@@ -204,29 +204,62 @@ def parse_suricata_output(
 
             if any(record.get(event_type) for event_type in ["http", "dns", "flow"]) and flow_id:
                 attributes = []
-                for source in oid_lookup.get(flow_id, []):
+                sources = oid_lookup.get(flow_id, [])
+                for source in sources:
                     attribute = {"source": source}
+                    network_part: NetworkConnection = ontology._result_parts.get(source["ontology_id"])
                     if not regex.match(IP_ONLY_REGEX, ext_hostname):
                         attribute["domain"] = ext_hostname
                     if record.get("http") and record["http"].get("hostname"):
                         # Only alerts containing HTTP details can provide URI-relevant information
+                        http_record = record["http"]
+                        network_part_http_details = network_part.http_details
+
+                        if (
+                            "content_range" in http_record
+                            and http_record["content_range"]["raw"]
+                            != network_part_http_details.response_headers["content_range"]
+                        ):
+                            # Content range doesn't match
+                            continue
+                        elif (
+                            "http_user_agent" in http_record
+                            and http_record["http_user_agent"]
+                            != network_part_http_details.request_headers["user_agent"]
+                        ):
+                            # User agent doesn't match
+                            continue
+                        elif (
+                            "http_content_type" in http_record
+                            and http_record["http_content_type"]
+                            != network_part_http_details.response_headers["content_type"]
+                        ):
+                            # Content type doesn't match
+                            continue
+
+                        if not (
+                            http_record["http_method"] == network_part_http_details.request_method
+                            and http_record["status"] == network_part_http_details.response_status_code
+                        ):
+                            # Request method or status code doesn't match
+                            continue
+
                         hostname = reverse_lookup.get(
-                            record["http"]["hostname"],
-                            record["http"]["hostname"],
+                            http_record["hostname"],
+                            http_record["hostname"],
                         )
-                        if record["http"]["url"].startswith(hostname):
+                        if http_record["url"].startswith(hostname):
                             url = f"{app_proto}://{record['http']['url']}"
                         else:
                             url = f"{app_proto}://{hostname+record['http']['url']}"
                         url = (
-                            convert_url_to_https(record["http"].get("http_method", "GET"), url)
+                            convert_url_to_https(http_record.get("http_method", "GET"), url)
                             if from_proxied_sandbox
                             else url
                         )
                         attribute.update({"uri": url})
                     elif record.get("dns"):
                         # Only attach network results that are directly related to the alert
-                        network_part: NetworkConnection = ontology._result_parts.get(source["ontology_id"])
                         if not any(
                             query["rrname"] == network_part.dns_details.domain for query in record["dns"]["query"]
                         ):
