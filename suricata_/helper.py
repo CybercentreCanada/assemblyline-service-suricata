@@ -218,21 +218,21 @@ def parse_suricata_output(
                         if (
                             "content_range" in http_record
                             and http_record["content_range"]["raw"]
-                            != network_part_http_details.response_headers["content_range"]
+                            != network_part_http_details.response_headers.get("content_range")
                         ):
                             # Content range doesn't match
                             continue
                         elif (
                             "http_user_agent" in http_record
                             and http_record["http_user_agent"]
-                            != network_part_http_details.request_headers["user_agent"]
+                            != network_part_http_details.request_headers.get("user_agent")
                         ):
                             # User agent doesn't match
                             continue
                         elif (
                             "http_content_type" in http_record
                             and http_record["http_content_type"]
-                            != network_part_http_details.response_headers["content_type"]
+                            != network_part_http_details.response_headers.get("content_type")
                         ):
                             # Content type doesn't match
                             continue
