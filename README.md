@@ -18,6 +18,8 @@ Organizations can add their own rulesets to this service.
 
 ## Test if working
 
- Just inside the container run:
- 
-        python -m assemblyline_v4_service.dev.run_service_once suricata_.suricata_.Suricata /tmp/testing.pcap
+Inside the container run:
+
+```bash
+python -m assemblyline_v4_service.dev.run_service_once suricata_.suricata_.Suricata /tmp/testing.pcap
+```
