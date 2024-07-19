@@ -41,6 +41,7 @@ def parse_suricata_output(
     event_types = {
         "dns": [],
         "http": [],
+        "flow": [],
         "netflow": [],
         "smtp": [],
         "tls": [],
@@ -180,8 +181,8 @@ def parse_suricata_output(
                         # Extract the actual IP and it's resolution
                         domain = domain.rstrip(".in-addr.arpa")[::-1]
                     reverse_lookup[domain] = resolved_ips[0]
-        # elif record["event_type"] == "netflow":
-        #     attach_network_connection(network_data)
+        elif record["event_type"] == "flow":
+            attach_network_connection(network_data)
         elif record["event_type"] == "alert":
             if "signature_id" not in record["alert"] or "signature" not in record["alert"]:
                 continue
@@ -210,7 +211,7 @@ def parse_suricata_output(
                     network_part: NetworkConnection = ontology._result_parts.get(source["ontology_id"])
                     if not regex.match(IP_ONLY_REGEX, ext_hostname):
                         attribute["domain"] = ext_hostname
-                    if record.get("http") and record["http"].get("hostname"):
+                    if record.get("http") and record["http"].get("hostname") and network_part.http_details:
                         # Only alerts containing HTTP details can provide URI-relevant information
                         http_record = record["http"]
                         network_part_http_details = network_part.http_details
@@ -258,7 +259,7 @@ def parse_suricata_output(
                             else url
                         )
                         attribute.update({"uri": url})
-                    elif record.get("dns"):
+                    elif record.get("dns") and network_part.dns_details:
                         # Only attach network results that are directly related to the alert
                         if not any(
                             query["rrname"] == network_part.dns_details.domain for query in record["dns"]["query"]
