@@ -237,10 +237,16 @@ def parse_suricata_output(
                         ):
                             # Content type doesn't match
                             continue
+                        elif (
+                            "status" in http_record
+                            and http_record["status"]
+                            != network_part_http_details.response_status_code
+                        ):
+                            # Status code doesn't match
+                            continue                            
 
                         if not (
                             http_record["http_method"] == network_part_http_details.request_method
-                            and http_record["status"] == network_part_http_details.response_status_code
                         ):
                             # Request method or status code doesn't match
                             continue
