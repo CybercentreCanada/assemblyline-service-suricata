@@ -211,43 +211,37 @@ def parse_suricata_output(
                     network_part: NetworkConnection = ontology._result_parts.get(source["ontology_id"])
                     if not regex.match(IP_ONLY_REGEX, ext_hostname):
                         attribute["domain"] = ext_hostname
-                    if record.get("http") and record["http"].get("hostname") and network_part.http_details:
+                    if app_proto == "http" and not network_part.http_details:
+                        # Alert pertains to an HTTP event
+                        continue
+                    elif record.get("http") and record["http"].get("hostname") and network_part.http_details:
                         # Only alerts containing HTTP details can provide URI-relevant information
                         http_record = record["http"]
                         network_part_http_details = network_part.http_details
 
-                        if (
-                            "content_range" in http_record
-                            and http_record["content_range"]["raw"]
-                            != network_part_http_details.response_headers.get("content_range")
-                        ):
+                        if "content_range" in http_record and http_record["content_range"][
+                            "raw"
+                        ] != network_part_http_details.response_headers.get("content_range"):
                             # Content range doesn't match
                             continue
-                        elif (
-                            "http_user_agent" in http_record
-                            and http_record["http_user_agent"]
-                            != network_part_http_details.request_headers.get("user_agent")
-                        ):
+                        elif "http_user_agent" in http_record and http_record[
+                            "http_user_agent"
+                        ] != network_part_http_details.request_headers.get("user_agent"):
                             # User agent doesn't match
                             continue
-                        elif (
-                            "http_content_type" in http_record
-                            and http_record["http_content_type"]
-                            != network_part_http_details.response_headers.get("content_type")
-                        ):
+                        elif "http_content_type" in http_record and http_record[
+                            "http_content_type"
+                        ] != network_part_http_details.response_headers.get("content_type"):
                             # Content type doesn't match
                             continue
                         elif (
                             "status" in http_record
-                            and http_record["status"]
-                            != network_part_http_details.response_status_code
+                            and http_record["status"] != network_part_http_details.response_status_code
                         ):
                             # Status code doesn't match
-                            continue                            
+                            continue
 
-                        if not (
-                            http_record["http_method"] == network_part_http_details.request_method
-                        ):
+                        if not (http_record["http_method"] == network_part_http_details.request_method):
                             # Request method or status code doesn't match
                             continue
 
@@ -332,6 +326,6 @@ def parse_suricata_output(
         "urls": urls,
         "email_addresses": email_addresses,
         "tls": tls_dict,
-        "extracted_files": extracted_files.values(),
+        "extracted_files": list(extracted_files.values()),
         "reverse_lookup": reverse_lookup,
     }

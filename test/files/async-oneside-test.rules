@@ -1,7 +1,0 @@
-# Given a HTTP POST pcap with single sided traffic, missing the first syn, syn/ack, and suricata 4.0.4 from PPA
-
-# This rule fires all the time
-alert http any any -> any any (msg: "ALERT http to_server"; flow:to_server; content: "POST"; sid:1; rev:1;)
-
-# This one only fires with async-oneside set to *false*
-alert http any any -> any any (msg: ("ALERT http established and to_server"; flow:to_server,established; content: "POST"; sid: 2; rev:1;)

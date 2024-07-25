@@ -1,0 +1,18 @@
+{
+  "signatures": {
+      "0:2825564": {
+          "attributes": [
+              {
+                  "source": {
+                      "ontology_id": "network_5vAUsPCHBRjuVw2VD9msTF",
+                      "service_name": null,
+                      "tag": "0.0.0.1:2",
+                      "time_observed": "2023-01-26 16:03:18.121508+00:00"
+                  }
+              }
+          ],
+          "malware_family": [],
+          "signature": "TEST"
+      }
+  }
+}
