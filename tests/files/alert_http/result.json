@@ -1,0 +1,19 @@
+{
+  "signatures": {
+    "0:2811170": {
+      "attributes": [
+        {
+          "source": {
+            "ontology_id": "network_http_fkW8ZA1YJOfyF8ULRt4sI",
+            "service_name": null,
+            "tag": "0.0.0.1:2",
+            "time_observed": "2023-09-28 13:37:57.854302+00:00"
+          },
+          "uri": "http://bad.com/bad_path"
+        }
+      ],
+      "malware_family": [],
+      "signature": "TEST"
+    }
+  }
+}
