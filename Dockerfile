@@ -3,7 +3,6 @@ FROM cccs/assemblyline-v4-service-base:$branch AS base
 
 ENV SERVICE_PATH suricata_.suricata_.Suricata
 ENV SURICATA_VERSION 0.8-dev
-ENV SURICATA_COMMIT a10c1f1dded570f99c4972ef9f730cec79218b75
 
 USER root
 
@@ -40,7 +39,10 @@ RUN cargo install --force cbindgen
 # Build suricata
 RUN mkdir -p /suricata
 WORKDIR /suricata
-RUN git clone https://github.com/OISF/suricata.git
+
+# Pending: https://github.com/OISF/suricata/pull/11406/files
+ENV SURICATA_COMMIT rust/time-version/v2
+RUN git clone https://github.com/jasonish/suricata.git
 WORKDIR /suricata/suricata
 RUN git checkout ${SURICATA_COMMIT}
 RUN ./scripts/bundle.sh
