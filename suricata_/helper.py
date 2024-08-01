@@ -108,7 +108,6 @@ def parse_suricata_output(
             "destination_ip": dest_ip,
             "destination_port": dest_port,
             "transport_layer_protocol": proto,
-            "connection_type": app_proto,
             "direction": direction,
         }
 
@@ -160,7 +159,8 @@ def parse_suricata_output(
             attach_network_connection(network_data)
 
         elif record["event_type"] == "dns":
-            if "rrname" not in record["dns"]:
+            if record["dns"]["type"] == "query":
+                # Ignore event records about DNS queries
                 continue
             domain = record["dns"]["rrname"]
             if regex.match(DOMAIN_ONLY_REGEX, domain) and domain not in domains and domain not in ips:
@@ -259,11 +259,15 @@ def parse_suricata_output(
                             else url
                         )
                         attribute.update({"uri": url})
-                    elif record.get("dns") and network_part.dns_details:
-                        # Only attach network results that are directly related to the alert
+                    elif record.get("dns"):
+                        if not network_part.dns_details:
+                            # Only attach network results that are directly related to the alert
+                            continue
+
                         if not any(
                             query["rrname"] == network_part.dns_details.domain for query in record["dns"]["query"]
                         ):
+                            # This particular record isn't relevant to the alert
                             continue
                     attributes.append(attribute)
 
