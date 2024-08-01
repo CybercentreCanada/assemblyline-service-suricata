@@ -269,32 +269,54 @@ def parse_suricata_output(
                         ):
                             # This particular record isn't relevant to the alert
                             continue
+                    elif record.get("smtp"):
+                        if not network_part.smtp_details:
+                            # Only attach network results that are directly related to the alert
+                            continue
+
+                        if (
+                            f"<{network_part.smtp_details.mail_from}>" != record["smtp"]["mail_from"]
+                            and not all(
+                                [eml[1:-1] in network_part.smtp_details.mail_to for eml in record["smtp"]["rcpt_to"]]
+                            )
+                            and network_part.smtp_details.attachments != record["email"]["attachment"]
+                        ):
+                            # This particular record isn't relevant to the alert
+                            continue
+
                     attributes.append(attribute)
 
-                if attributes:
-                    signatures[signature_key]["attributes"] = (
-                        signatures[signature_key].get("attributes", []) + attributes
-                    )
+                for attr in attributes:
+                    # Ensure there are no duplicate attributes being merged
+                    if attr not in signatures[signature_key]["attributes"]:
+                        signatures[signature_key]["attributes"].append(attr)
 
             alerts[signature_key].append((timestamp, src_ip, src_port, dest_ip, dest_port))
 
         elif record["event_type"] == "smtp":
             # extract email metadata
-            if "smtp" not in record:
+            if "email" not in record:
                 continue
             if not isinstance(record["smtp"], dict):
                 continue
 
             mail_from = record["smtp"].get("mail_from")
             if mail_from is not None:
-                mail_from = mail_from.replace("<", "").replace(">", "")
+                mail_from = mail_from[1:-1]
                 if mail_from not in email_addresses:
                     email_addresses.append(mail_from)
 
+            mail_to = []
             for email_addr in record["smtp"].get("rcpt_to", []):
-                email_addr = email_addr.replace("<", "").replace(">", "")
+                email_addr = email_addr[1:-1]
+                mail_to.append(email_addr)
                 if email_addr not in email_addresses:
                     email_addresses.append(email_addr)
+            network_data["connection_type"] = "smtp"
+            network_data["smtp_details"] = dict(
+                mail_to=mail_to, mail_from=mail_from, attachments=record["email"].get("attachment", [])
+            )
+            attach_network_connection(network_data)
 
         elif record["event_type"] == "tls":
             if "tls" not in record:
