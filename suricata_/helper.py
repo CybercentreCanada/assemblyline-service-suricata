@@ -8,9 +8,12 @@ import dateutil.parser as dateparser
 import regex
 from assemblyline.odm.base import DOMAIN_ONLY_REGEX, IP_ONLY_REGEX
 from assemblyline.odm.models.ontology.results import NetworkConnection
+from assemblyline.common.identify import Identify
 from assemblyline_service_utilities.common.network_helper import convert_url_to_https
 from assemblyline_v4_service.common.ontology_helper import OntologyHelper
 from assemblyline_v4_service.common.task import PARENT_RELATION
+
+IDENTIFY = Identify(use_cache="PRIVILEGED" in os.environ)
 
 
 def parse_suricata_output(
@@ -342,17 +345,26 @@ def parse_suricata_output(
             # We'll assume the filename is unique to the flow
             extracted_files.setdefault(flow_id, {})
             if filename not in extracted_files.get(flow_id):
-                extracted_files[flow_id][filename] = record["fileinfo"]
-                # Include extracted_file_path
-                extracted_files[flow_id][filename] = {
-                    "extracted_file_path": os.path.join(
+                extracted_files[flow_id][filename] = IDENTIFY.fileinfo(
+                    os.path.join(
                         working_directory,
                         "filestore",
                         sha256_full[:2].lower(),
                         sha256_full,
-                    ),
-                    "names": [filename],
-                }
+                    )
+                )
+                # Include extracted_file_path
+                extracted_files[flow_id][filename].update(
+                    {
+                        "extracted_file_path": os.path.join(
+                            working_directory,
+                            "filestore",
+                            sha256_full[:2].lower(),
+                            sha256_full,
+                        ),
+                        "names": [filename],
+                    }
+                )
     return {
         "alerts": alerts,
         "signatures": signatures,
