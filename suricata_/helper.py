@@ -8,9 +8,12 @@ import dateutil.parser as dateparser
 import regex
 from assemblyline.odm.base import DOMAIN_ONLY_REGEX, IP_ONLY_REGEX
 from assemblyline.odm.models.ontology.results import NetworkConnection
+from assemblyline.common.identify import Identify
 from assemblyline_service_utilities.common.network_helper import convert_url_to_https
 from assemblyline_v4_service.common.ontology_helper import OntologyHelper
 from assemblyline_v4_service.common.task import PARENT_RELATION
+
+IDENTIFY = Identify(use_cache="PRIVILEGED" in os.environ)
 
 
 def parse_suricata_output(
@@ -39,13 +42,13 @@ def parse_suricata_output(
     reverse_lookup = {}
     oid_lookup = {}
     event_types = {
+        "fileinfo": [],
         "dns": [],
         "http": [],
         "flow": [],
         "netflow": [],
         "smtp": [],
         "tls": [],
-        "fileinfo": [],
         "alert": [],
     }
 
@@ -208,10 +211,14 @@ def parse_suricata_output(
                 sources = oid_lookup.get(flow_id, [])
                 for source in sources:
                     attribute = {"source": source}
-                    network_part: NetworkConnection = ontology._result_parts.get(source["ontology_id"])
+                    network_part: NetworkConnection | None = ontology._result_parts.get(source["ontology_id"])
                     if not regex.match(IP_ONLY_REGEX, ext_hostname):
                         attribute["domain"] = ext_hostname
-                    if app_proto == "http" and not network_part.http_details:
+
+                    if not network_part:
+                        # No network attribute to link to alert
+                        continue
+                    elif app_proto == "http" and not network_part.http_details:
                         # Alert pertains to an HTTP event
                         continue
                     elif record.get("http") and record["http"].get("hostname") and network_part.http_details:
@@ -269,32 +276,56 @@ def parse_suricata_output(
                         ):
                             # This particular record isn't relevant to the alert
                             continue
+                    elif record.get("smtp"):
+                        if not network_part.smtp_details:
+                            # Only attach network results that are directly related to the alert
+                            continue
+
+                        if (
+                            f"<{network_part.smtp_details.mail_from}>" != record["smtp"]["mail_from"]
+                            and not all(
+                                [eml[1:-1] in network_part.smtp_details.mail_to for eml in record["smtp"]["rcpt_to"]]
+                            )
+                            and network_part.smtp_details.attachments != record["email"]["attachment"]
+                        ):
+                            # This particular record isn't relevant to the alert
+                            continue
+
                     attributes.append(attribute)
 
-                if attributes:
-                    signatures[signature_key]["attributes"] = (
-                        signatures[signature_key].get("attributes", []) + attributes
-                    )
+                for attr in attributes:
+                    # Ensure there are no duplicate attributes being merged
+                    if attr not in signatures[signature_key]["attributes"]:
+                        signatures[signature_key]["attributes"].append(attr)
 
             alerts[signature_key].append((timestamp, src_ip, src_port, dest_ip, dest_port))
 
         elif record["event_type"] == "smtp":
             # extract email metadata
-            if "smtp" not in record:
+            if "email" not in record:
                 continue
             if not isinstance(record["smtp"], dict):
                 continue
 
             mail_from = record["smtp"].get("mail_from")
             if mail_from is not None:
-                mail_from = mail_from.replace("<", "").replace(">", "")
+                mail_from = mail_from[1:-1]
                 if mail_from not in email_addresses:
                     email_addresses.append(mail_from)
 
+            mail_to = []
             for email_addr in record["smtp"].get("rcpt_to", []):
-                email_addr = email_addr.replace("<", "").replace(">", "")
+                email_addr = email_addr[1:-1]
+                mail_to.append(email_addr)
                 if email_addr not in email_addresses:
                     email_addresses.append(email_addr)
+            network_data["connection_type"] = "smtp"
+            attachments = []
+            for filename in record["email"].get("attachment", []):
+                if filename in extracted_files[flow_id]:
+                    attachments.append(extracted_files[flow_id][filename])
+            network_data["smtp_details"] = dict(mail_to=mail_to, mail_from=mail_from, attachments=attachments)
+            attach_network_connection(network_data)
 
         elif record["event_type"] == "tls":
             if "tls" not in record:
@@ -309,19 +340,31 @@ def parse_suricata_output(
                     tls_dict[tls_type].append(tls_value)
 
         elif record["event_type"] == "fileinfo":
+            filename = record["fileinfo"]["filename"]
             sha256_full = record["fileinfo"]["sha256"]
-            if sha256_full not in extracted_files:
-                sha256 = f"{sha256_full[:12]}.data"
-                extracted_files[sha256_full] = {
-                    "sha256": sha256,
-                    "filename": os.path.basename(record["fileinfo"].get("filename", sha256)) or sha256,
-                    "extracted_file_path": os.path.join(
+            # We'll assume the filename is unique to the flow
+            extracted_files.setdefault(flow_id, {})
+            if filename not in extracted_files.get(flow_id):
+                extracted_files[flow_id][filename] = IDENTIFY.fileinfo(
+                    os.path.join(
                         working_directory,
                         "filestore",
                         sha256_full[:2].lower(),
                         sha256_full,
-                    ),
-                }
+                    )
+                )
+                # Include extracted_file_path
+                extracted_files[flow_id][filename].update(
+                    {
+                        "extracted_file_path": os.path.join(
+                            working_directory,
+                            "filestore",
+                            sha256_full[:2].lower(),
+                            sha256_full,
+                        ),
+                        "names": [filename],
+                    }
+                )
     return {
         "alerts": alerts,
         "signatures": signatures,
@@ -330,6 +373,6 @@ def parse_suricata_output(
         "urls": urls,
         "email_addresses": email_addresses,
         "tls": tls_dict,
-        "extracted_files": list(extracted_files.values()),
+        "extracted_files": list([file for flow_files in extracted_files.values() for file in flow_files.values()]),
         "reverse_lookup": reverse_lookup,
     }
