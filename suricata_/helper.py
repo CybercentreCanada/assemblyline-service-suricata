@@ -273,7 +273,7 @@ def parse_suricata_output(
 
                         if not any(
                             query["rrname"] == network_part.dns_details.domain
-                            for query in record["dns"].get("query", [])
+                            for query in record["dns"].get("queries", [])
                         ):
                             # This particular record isn't relevant to the alert
                             continue
@@ -366,6 +366,19 @@ def parse_suricata_output(
                         "names": [filename],
                     }
                 )
+
+    # De-duplicate extracted files:
+    extracted_files_dedup = []
+    for flow_files in extracted_files.values():
+        for file in flow_files.values():
+            extracted_file = {
+                "sha256": file["sha256"],
+                "name": file["names"][0],
+                "extracted_file_path": file["extracted_file_path"],
+            }
+            if extracted_file not in extracted_files_dedup:
+                extracted_files_dedup.append(extracted_file)
+
     return {
         "alerts": alerts,
         "signatures": signatures,
@@ -374,6 +387,6 @@ def parse_suricata_output(
         "urls": urls,
         "email_addresses": email_addresses,
         "tls": tls_dict,
-        "extracted_files": list([file for flow_files in extracted_files.values() for file in flow_files.values()]),
+        "extracted_files": extracted_files_dedup,
         "reverse_lookup": reverse_lookup,
     }
