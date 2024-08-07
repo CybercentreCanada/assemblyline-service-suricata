@@ -40,9 +40,8 @@ RUN cargo install --force cbindgen
 RUN mkdir -p /suricata
 WORKDIR /suricata
 
-# Pending: https://github.com/OISF/suricata/pull/11406/files
-ENV SURICATA_COMMIT rust/time-version/v2
-RUN git clone https://github.com/jasonish/suricata.git
+ENV SURICATA_COMMIT 61cb14d272b51e7224809aa808f67793e0a7c2f4
+RUN git clone https://github.com/OISF/suricata.git
 WORKDIR /suricata/suricata
 RUN git checkout ${SURICATA_COMMIT}
 RUN ./scripts/bundle.sh
