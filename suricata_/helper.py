@@ -273,7 +273,7 @@ def parse_suricata_output(
 
                         if not any(
                             query["rrname"] == network_part.dns_details.domain
-                            for query in record["dns"].get("queries", [])
+                            for query in record["dns"].get("queries", []) + record["dns"].get("query", [])
                         ):
                             # This particular record isn't relevant to the alert
                             continue
