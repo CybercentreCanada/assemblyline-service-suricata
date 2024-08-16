@@ -40,7 +40,7 @@ RUN cargo install --force cbindgen
 RUN mkdir -p /suricata
 WORKDIR /suricata
 
-ENV SURICATA_COMMIT 61cb14d272b51e7224809aa808f67793e0a7c2f4
+ENV SURICATA_COMMIT 304271e63a9e388412f25f0f94a1a0da4bf619d9
 RUN git clone https://github.com/OISF/suricata.git
 WORKDIR /suricata/suricata
 RUN git checkout ${SURICATA_COMMIT}
