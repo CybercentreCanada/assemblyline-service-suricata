@@ -32,4 +32,5 @@ extends:
     is_public: "true"
     samples_repo: unittest-samples
     labels:
-      CLASSIFICATION: UNCLASSIFIED
+      CLASSIFICATION: "UNCLASSIFIED"
+      classification: "UNCLASSIFIED"
