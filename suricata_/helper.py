@@ -39,7 +39,7 @@ def parse_suricata_output(
         any(a[-1]["parent_relation"] == PARENT_RELATION.DYNAMIC for a in ancestry) and uses_proxy_in_sandbox
     )
 
-    reverse_lookup = {}
+    reverse_lookup = dict()
     oid_lookup = {}
     event_types = {
         "fileinfo": [],
@@ -81,8 +81,13 @@ def parse_suricata_output(
     # Populate reverse lookup map
     for record in event_types["dns"]:
         domain = record["dns"]["rrname"]
-        for lookup_type, resolved_ips in record["dns"].get("grouped", {}).items():
-            reverse_lookup.update({ip: domain for ip in resolved_ips})
+        if record["dns"].get("rrtype") == "SRV":
+            # These kinds of records have to be parsed differently
+            for answer in record["dns"].get("additionals", []):
+                reverse_lookup[answer["rdata"]] = answer["rrname"]
+        else:
+            for lookup_type, resolved_ips in record["dns"].get("grouped", {}).items():
+                reverse_lookup.update({ip: domain for ip in resolved_ips})
 
     for record in ordered_records:
         timestamp = dateparser.parse(record["timestamp"]).isoformat(" ")
