@@ -101,7 +101,7 @@ class Suricata(ServiceBase):
                     )
 
                     # Get the list of rules that failed and log them
-                    ret = self.suricata_sc.send_command("ruleset-failed-stats")
+                    ret = self.suricata_sc.send_command("ruleset-failed-rules")
                     if ret:
                         for rule in ret.get("message", []):
                             self.log.warning(f"Rule failed to load: {rule['rule']}")
