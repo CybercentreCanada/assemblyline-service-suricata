@@ -100,6 +100,12 @@ class Suricata(ServiceBase):
                         "This can be due to duplication of rules among muliple rulesets being loaded."
                     )
 
+                    # Get the list of rules that failed and log them
+                    ret = self.suricata_sc.send_command("ruleset-failed-stats")
+                    if ret:
+                        for rule in ret.get("message", []):
+                            self.log.warning(f"Rule failed to load: {rule['rule']}")
+
     def get_suricata_version(self):
         return safe_str(subprocess.check_output(["suricata", "-V"]).strip().replace(b"This is Suricata version ", b""))
 
