@@ -14,6 +14,7 @@ RUN apt-get update && apt-get install -y wget curl\
   libnss3-dev libgeoip-dev liblua5.1-dev libhiredis-dev libevent-dev \
   rustc cargo autoconf libpcre2-dev\
   libtool jq git-core automake liblz4-dev\
+  wireshark-common \
   && rm -rf /var/lib/apt/lists/*
 
 FROM base AS build
