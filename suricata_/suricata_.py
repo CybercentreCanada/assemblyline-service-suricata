@@ -218,11 +218,17 @@ class Suricata(ServiceBase):
             raise Exception("Suricata could not be started.")
 
     def execute(self, request):
-        file_path = request.file_path
+        file_path = os.path.join(self.working_directory, f"{request.sha256}.pcap")
         result = Result()
 
         # Report the version of suricata as the service context
         request.set_service_context(f"Suricata version: {self.get_suricata_version()}")
+
+        # Try conversion of input file to PCAP format (on failure, return empty result)
+        proc = subprocess.run(["editcap", "-F", "pcap", request.file_path, file_path], capture_output=True)
+        if proc.stderr:
+            request.result = result
+            return
 
         # restart Suricata if we need to
         self.start_suricata_if_necessary()
