@@ -34,6 +34,7 @@ def parse_suricata_output(
     extracted_files = {}
     temp_submission_data.setdefault("url_headers", {})
     ancestry = temp_submission_data.setdefault("ancestry", [])
+    alert_logs = []
 
     from_proxied_sandbox = (
         any(a[-1]["parent_relation"] == PARENT_RELATION.DYNAMIC for a in ancestry) and uses_proxy_in_sandbox
@@ -192,6 +193,7 @@ def parse_suricata_output(
         elif record["event_type"] == "flow":
             attach_network_connection(network_data)
         elif record["event_type"] == "alert":
+            alert_logs.append(record)
             if "signature_id" not in record["alert"] or "signature" not in record["alert"]:
                 continue
             signature_id = record["alert"]["signature_id"]
@@ -383,6 +385,10 @@ def parse_suricata_output(
             }
             if extracted_file not in extracted_files_dedup:
                 extracted_files_dedup.append(extracted_file)
+
+    if alert_logs:
+        # Append logging to ontology in 'other' key
+        ontology.add_other_part("alerts", json.dumps(alert_logs))
 
     return {
         "alerts": alerts,
