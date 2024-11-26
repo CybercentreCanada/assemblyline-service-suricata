@@ -1,5 +1,6 @@
 import json
 import os
+import pathlib
 import subprocess
 import sys
 import time
@@ -192,6 +193,19 @@ class Suricata(ServiceBase):
 
     # Launch Suricata using a UID socket
     def launch_or_load_suricata(self):
+        self.log.info("Checking whether a stale Suricata PID file already exists")
+        """
+        Check whether a PID file already exists; if it does, this might be a restart
+        and we should remove it as there likely isn't a running Suricata instance.
+        """
+        pid_path = pathlib.Path(self.run_dir, "suricata.pid")
+        if pid_path.exists():
+            self.log.warning("Attempting to remove stale Suricata PID file")
+            try:
+                pid_path.unlink()
+            except PermissionError:
+                raise PermissionError("Could not delete stale Suricata PID file")
+
         self.suricata_socket = os.path.join(self.run_dir, "suricata.socket")
 
         if not os.path.exists(self.suricata_socket):
