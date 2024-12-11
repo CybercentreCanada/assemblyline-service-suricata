@@ -22,6 +22,8 @@ class SuricataUpdateServer(ServiceUpdater):
         files_sha256,
         source_name,
         default_classification=classification.UNRESTRICTED,
+        *args,
+        **kwargs
     ):
         signatures = []
         for file, _ in files_sha256:
