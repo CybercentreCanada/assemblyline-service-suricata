@@ -1,0 +1,23 @@
+{
+  "template": "https://github.com/CybercentreCanada/assemblyline-service-template.git",
+  "commit": "6a32666117e30dbfb990bfaf6e7c9eb25badd03a",
+  "checkout": null,
+  "context": {
+    "cookiecutter": {
+      "service_name": "suricata",
+      "__svc_name": "suricata",
+      "__repository": "assemblyline-service-suricata",
+      "__pkg_name": "suricata",
+      "__class_name": "Suricata",
+      "short_description": "This service scans network capture files with signature and extract files from network capture.",
+      "short_description_fr": "Ce service analyse les fichiers de capture réseau avec signature et extrait les fichiers de la capture réseau.",
+      "stage": "CORE",
+      "category": "Networking",
+      "org_name_full": "CybercentreCanada",
+      "org_name_short": "cccs",
+      "license": "mit",
+      "_template": "https://github.com/CybercentreCanada/assemblyline-service-template.git"
+    }
+  },
+  "directory": null
+}
