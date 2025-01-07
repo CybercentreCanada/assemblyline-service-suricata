@@ -2,21 +2,26 @@ name: Suricata
 version: $SERVICE_TAG
 description: This service scans network capture files with signature and extract files from network capture.
 
+# Regex defining the types of files the service accepts and rejects
 accepts: network/.*
 rejects: empty|metadata/.*
 
+# At which stage the service should run (one of FILTER, EXTRACT, CORE, SECONDARY, POST, REVIEW)
+# NOTE: Stages are executed in the order defined in the list
 stage: CORE
+# Which category the service is part of (one of Antivirus, Dynamic Analysis, External, Extraction, Filtering, Internet Connected, Networking, Static Analysis)
 category: Networking
 
+# Does the service require access to the file to perform its task
+# If set to false, the service will only have access to the file metadata (e.g. Hashes, size, type, ...)
 file_required: true
+# Maximum execution time the service has before it's considered to be timed out
 timeout: 180
-disable_cache: false
 
+# is the service enabled by default
 enabled: true
-is_external: false
-licence_count: 0
-uses_temp_submission_data: true
 privileged: true
+uses_temp_submission_data: true
 
 config:
   sure_score: ["MALWARE", "TROJAN", "CURRENT_EVENTS", "CnC", "Checkin"]
