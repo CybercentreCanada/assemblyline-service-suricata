@@ -1927,8 +1927,8 @@ __RULE_FILES__
 ## Auxiliary configuration files.
 ##
 
-classification-file: /etc/suricata/classification.config
-reference-config-file: /etc/suricata/reference.config
+classification-file: /usr/local/etc/suricata/classification.config
+reference-config-file: /usr/local/etc/suricata/reference.config
 # threshold-file: /etc/suricata/threshold.config
 
 ##
