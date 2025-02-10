@@ -109,7 +109,7 @@ def parse_suricata_output(
 
         network_data = {
             "objectid": {
-                "tag": ext_hostname + f"{f':{dest_port}' if dest_port else ''}",
+                "tag": f"{dest_ip if dest_ip else ext_hostname}" + f"{f':{dest_port}' if dest_port else ''}",
                 "time_observed": timestamp,
             },
             "source_ip": src_ip,
