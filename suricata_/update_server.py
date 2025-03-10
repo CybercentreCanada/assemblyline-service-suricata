@@ -7,15 +7,18 @@ import time
 
 from assemblyline.common import forge
 from assemblyline.odm.models.signature import Signature
-from assemblyline_v4_service.updater.updater import ServiceUpdater, SIGNATURES_META_FILENAME, UPDATER_DIR, STATUS_FILE
+from assemblyline_v4_service.updater.updater import (
+    SIGNATURES_META_FILENAME,
+    STATUS_FILE,
+    UPDATER_DIR,
+    ServiceUpdater,
+)
 from suricataparser import parse_file
 
 classification = forge.get_classification()
 
 
 class SuricataUpdateServer(ServiceUpdater):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
 
     def import_update(
         self,
@@ -144,5 +147,5 @@ class SuricataUpdateServer(ServiceUpdater):
 
 
 if __name__ == "__main__":
-    with SuricataUpdateServer(default_pattern=".*\.rules") as server:
+    with SuricataUpdateServer() as server:
         server.serve_forever()
