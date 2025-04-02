@@ -520,9 +520,3 @@ class Suricata(ServiceBase):
             request.add_supplementary(os.path.join(self.working_directory, "stats.log"), "stats.log", "log")
 
         request.result = result
-
-        # Add the stats.log to the result, which can be used to determine service success
-        if os.path.exists(os.path.join(self.working_directory, "stats.log")):
-            request.add_supplementary(os.path.join(self.working_directory, "stats.log"), "stats.log", "log")
-
-        request.result = result
