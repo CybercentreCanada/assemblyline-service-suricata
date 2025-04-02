@@ -72,7 +72,7 @@ def parse_suricata_output(
     # Parse the json results of the service and organize them into certain categories
     with open(os.path.join(working_directory, "eve.json"), encoding="utf-8") as file:
         # Add raw event log to ontology
-        ontology.add_other_part("eve.json", file.read())
+        ontology.add_other_part("eve.json", {"tool": "suricata", "encoding": "raw", "content": file.read()})
         file.seek(0)
         for line in file:
             record = json.loads(line)
