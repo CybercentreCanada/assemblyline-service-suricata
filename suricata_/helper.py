@@ -6,9 +6,9 @@ from typing import Any, Dict
 
 import dateutil.parser as dateparser
 import regex
+from assemblyline.common.identify import Identify
 from assemblyline.odm.base import DOMAIN_ONLY_REGEX, IP_ONLY_REGEX
 from assemblyline.odm.models.ontology.results import NetworkConnection
-from assemblyline.common.identify import Identify
 from assemblyline_service_utilities.common.network_helper import convert_url_to_https
 from assemblyline_v4_service.common.ontology_helper import OntologyHelper
 from assemblyline_v4_service.common.task import PARENT_RELATION
@@ -71,6 +71,9 @@ def parse_suricata_output(
 
     # Parse the json results of the service and organize them into certain categories
     with open(os.path.join(working_directory, "eve.json"), encoding="utf-8") as file:
+        # Add raw event log to ontology
+        ontology.add_other_part("eve.json", file.read())
+        file.seek(0)
         for line in file:
             record = json.loads(line)
             if record["event_type"] in event_types:
@@ -385,10 +388,6 @@ def parse_suricata_output(
             }
             if extracted_file not in extracted_files_dedup:
                 extracted_files_dedup.append(extracted_file)
-
-    if alert_logs:
-        # Append logging to ontology in 'other' key
-        ontology.add_other_part("alerts", json.dumps(alert_logs))
 
     return {
         "alerts": alerts,

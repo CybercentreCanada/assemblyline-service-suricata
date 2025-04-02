@@ -17,9 +17,8 @@ from assemblyline.odm.models.ontology.results import Signature
 from assemblyline_v4_service.common.base import ServiceBase
 from assemblyline_v4_service.common.request import MaxExtractedExceeded
 from assemblyline_v4_service.common.result import BODY_FORMAT, Result, ResultSection
-from tenacity import RetryError, retry, retry_if_result, wait_exponential, stop_after_delay
-
 from suricata_.helper import parse_suricata_output
+from tenacity import RetryError, retry, retry_if_result, stop_after_delay, wait_exponential
 
 SURICATA_BIN = "/usr/local/bin/suricata"
 Classification = get_classification()
@@ -325,6 +324,10 @@ class Suricata(ServiceBase):
                     # We've hit our limit
                     pass
 
+            # Iterate over all the extracted files added to the task and tag the SHA256
+            for file in request.task.extracted:
+                file_extracted_section.add_tag("file.name.extracted", file['sha256'])
+
         # Report a null score to indicate that files were extracted. If no sigs hit, it's not clear
         # where the extracted files came from
         if file_extracted_section.body:
@@ -511,6 +514,12 @@ class Suricata(ServiceBase):
             "SuricataEventLog.json",
             "json",
         )
+
+        # Add the stats.log to the result, which can be used to determine service success
+        if os.path.exists(os.path.join(self.working_directory, "stats.log")):
+            request.add_supplementary(os.path.join(self.working_directory, "stats.log"), "stats.log", "log")
+
+        request.result = result
 
         # Add the stats.log to the result, which can be used to determine service success
         if os.path.exists(os.path.join(self.working_directory, "stats.log")):
