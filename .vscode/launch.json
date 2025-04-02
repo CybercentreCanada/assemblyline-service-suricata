@@ -5,7 +5,7 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "RunServiceOnce",
+            "name": "RunServiceOnce Suricata",
             "type": "python",
             "request": "launch",
             "module": "assemblyline_v4_service.dev.run_service_once",
@@ -17,5 +17,20 @@
             ],
             "justMyCode": false,
         },
+        {
+            "name": "[Service] Suricata - Privileged",
+            "type": "python",
+            "request": "launch",
+            "module": "assemblyline_v4_service.run_privileged_service",
+            "env": {
+                "SERVICE_MANIFEST_PATH": "service_manifest.yml",
+                "PRIVILEGED": "true",
+                "SERVICE_PATH": "suricata.suricata.Suricata",
+                "TASKING_DIR": "/tmp/Suricata"
+            },
+            "console": "internalConsole",
+            "cwd": "${workspaceFolder}",
+            "justMyCode": false,
+        }
     ]
 }
