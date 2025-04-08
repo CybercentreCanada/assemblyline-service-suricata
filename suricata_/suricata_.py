@@ -9,16 +9,23 @@ from io import StringIO
 import regex
 import suricatasc
 import yaml
+from assemblyline_v4_service.common.base import ServiceBase
+from assemblyline_v4_service.common.request import MaxExtractedExceeded
+from assemblyline_v4_service.common.result import BODY_FORMAT, Result, ResultSection
+from suricata_.helper import parse_suricata_output
+from tenacity import (
+    RetryError,
+    retry,
+    retry_if_result,
+    stop_after_delay,
+    wait_exponential,
+)
+
 from assemblyline.common.exceptions import RecoverableError
 from assemblyline.common.forge import get_classification
 from assemblyline.common.str_utils import safe_str
 from assemblyline.odm.base import DOMAIN_ONLY_REGEX
 from assemblyline.odm.models.ontology.results import Signature
-from assemblyline_v4_service.common.base import ServiceBase
-from assemblyline_v4_service.common.request import MaxExtractedExceeded
-from assemblyline_v4_service.common.result import BODY_FORMAT, Result, ResultSection
-from suricata_.helper import parse_suricata_output
-from tenacity import RetryError, retry, retry_if_result, stop_after_delay, wait_exponential
 
 SURICATA_BIN = "/usr/local/bin/suricata"
 Classification = get_classification()
@@ -511,8 +518,8 @@ class Suricata(ServiceBase):
         # Add the original Suricata output as a supplementary file in the result
         request.add_supplementary(
             os.path.join(self.working_directory, "eve.json"),
-            "SuricataEventLog.json",
-            "json",
+            "eve.json",
+            "Suricata Events JSON file",
         )
 
         # Add the stats.log to the result, which can be used to determine service success
