@@ -213,7 +213,7 @@ class Suricata(ServiceBase):
             try:
                 # Kill the stale process if it's still running
                 self.log.warning(f"Killing Suricata process {pid}")
-                os.kill(int(pid), signal.SIGTERM)
+                os.kill(int(pid), signal.SIGKILL)
             except ProcessLookupError:
                 pass
 
