@@ -1,6 +1,6 @@
 import json
 import os
-import pathlib
+import signal
 import subprocess
 import sys
 import time
@@ -17,7 +17,13 @@ from assemblyline.odm.models.ontology.results import Signature
 from assemblyline_v4_service.common.base import ServiceBase
 from assemblyline_v4_service.common.request import MaxExtractedExceeded
 from assemblyline_v4_service.common.result import BODY_FORMAT, Result, ResultSection
-from tenacity import RetryError, retry, retry_if_result, wait_exponential, stop_after_delay
+from tenacity import (
+    RetryError,
+    retry,
+    retry_if_result,
+    stop_after_delay,
+    wait_exponential,
+)
 
 from suricata_.helper import parse_suricata_output
 
@@ -198,33 +204,48 @@ class Suricata(ServiceBase):
         Check whether a PID file already exists; if it does, this might be a restart
         and we should remove it as there likely isn't a running Suricata instance.
         """
-        pid_path = pathlib.Path(self.run_dir, "suricata.pid")
-        if pid_path.exists():
+        pid_path = os.path.join(self.run_dir, "suricata.pid")
+        if os.path.exists(pid_path):
             self.log.warning("Attempting to remove stale Suricata PID file")
+            with open(pid_path, "r") as pid_file:
+                pid = pid_file.read().strip()
+
             try:
-                pid_path.unlink()
+                # Kill the stale process if it's still running
+                self.log.warning(f"Killing Suricata process {pid}")
+                os.kill(int(pid), signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+
+            try:
+                os.unlink(pid_path)
             except PermissionError:
                 raise PermissionError("Could not delete stale Suricata PID file")
 
         self.suricata_socket = os.path.join(self.run_dir, "suricata.socket")
+        if os.path.exists(self.suricata_socket):
+            self.log.warning("Attempting to remove stale Suricata socket file")
+            try:
+                os.unlink(self.suricata_socket)
+            except PermissionError:
+                raise PermissionError("Could not delete stale Suricata socket file")
 
-        if not os.path.exists(self.suricata_socket):
-            command = [
-                SURICATA_BIN,
-                "-vvvv",  # Useful for debugging
-                "-c",
-                self.suricata_yaml,
-                f"--unix-socket={self.suricata_socket}",
-                "--pidfile",
-                f"{self.run_dir}/suricata.pid",
-                "--set",
-                f"logging.outputs.1.file.filename={self.suricata_log}",
-                "-D",
-            ]
+        command = [
+            SURICATA_BIN,
+            "-vvvv",  # Useful for debugging
+            "-c",
+            self.suricata_yaml,
+            f"--unix-socket={self.suricata_socket}",
+            "--pidfile",
+            f"{self.run_dir}/suricata.pid",
+            "--set",
+            f"logging.outputs.1.file.filename={self.suricata_log}",
+            "-D",
+        ]
 
-            self.log.info(f"Launching Suricata: {' '.join(command)}")
+        self.log.info(f"Launching Suricata: {' '.join(command)}")
 
-            self.suricata_process = self.run_command(command)
+        self.suricata_process = self.run_command(command)
 
         self.suricata_sc = suricatasc.SuricataSC(self.suricata_socket)
 
