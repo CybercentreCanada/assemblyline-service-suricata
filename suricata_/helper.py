@@ -6,9 +6,9 @@ from typing import Any, Dict
 
 import dateutil.parser as dateparser
 import regex
+from assemblyline.common.identify import Identify
 from assemblyline.odm.base import DOMAIN_ONLY_REGEX, IP_ONLY_REGEX
 from assemblyline.odm.models.ontology.results import NetworkConnection
-from assemblyline.common.identify import Identify
 from assemblyline_service_utilities.common.network_helper import convert_url_to_https
 from assemblyline_v4_service.common.ontology_helper import OntologyHelper
 from assemblyline_v4_service.common.task import PARENT_RELATION
@@ -154,14 +154,15 @@ def parse_suricata_output(
                 "request_uri": url,
                 "request_headers": {
                     h["name"].replace("-", "_").lower(): h["value"] for h in http_details.get("request_headers", [])
+                    if "value" in h
                 },
                 "request_method": http_details.get("http_method", "").upper(),
                 "response_headers": {
-                    h["name"].replace("-", "_").lower(): h["value"] for h in http_details.get("response_headers", [])
+                    h["name"].replace("-", "_").lower(): h["value"] for h in http_details.get("response_headers", []) if "value" in h
                 },
             }
             temp_submission_data["url_headers"].update(
-                {url: {h["name"]: h["value"] for h in http_details.get("request_headers", [])}}
+                {url: {h["name"]: h["value"] for h in http_details.get("request_headers", []) if "value" in h}}
             )
             if http_details.get("status"):
                 network_data["http_details"].update({"response_status_code": http_details.get("status")})
