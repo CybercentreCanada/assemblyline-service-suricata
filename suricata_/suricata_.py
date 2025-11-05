@@ -303,6 +303,8 @@ class Suricata(ServiceBase):
                     break
             except ConnectionResetError as connection_reset_error:
                 raise RecoverableError(connection_reset_error) from connection_reset_error
+            except BrokenPipeError as broken_pipe_error:
+                raise RecoverableError(broken_pipe_error) from broken_pipe_error
 
         # Bring back stdout and stderr
         sys.stdout = old_stdout
