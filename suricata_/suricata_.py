@@ -16,7 +16,15 @@ from assemblyline.odm.base import DOMAIN_ONLY_REGEX
 from assemblyline.odm.models.ontology.results import Signature
 from assemblyline_v4_service.common.base import ServiceBase
 from assemblyline_v4_service.common.request import MaxExtractedExceeded
-from assemblyline_v4_service.common.result import BODY_FORMAT, Result, ResultSection
+from assemblyline_v4_service.common.result import (
+    Result,
+    ResultJSONSection,
+    ResultMultiSection,
+    ResultTextSection,
+    TableRow,
+    TableSectionBody,
+    TextSectionBody,
+)
 from tenacity import (
     RetryError,
     retry,
@@ -325,7 +333,7 @@ class Suricata(ServiceBase):
             self.working_directory, request.temp_submission_data, self.uses_proxy_in_sandbox, self.ontology
         ).values()
 
-        file_extracted_section = ResultSection("File(s) extracted by Suricata")
+        file_extracted_section = ResultTextSection("File(s) extracted by Suricata")
         # Parse the json results of the service
         if request.get_param("extract_files"):
             for file in extracted_files:
@@ -338,7 +346,11 @@ class Suricata(ServiceBase):
                         "Extracted by Suricata",
                         safelist_interface=self.api_interface,
                     ):
-                        file_extracted_section.add_line(filename)
+                        if not file_extracted_section.body:
+                            file_extracted_section.add_line(filename)
+                        elif filename not in file_extracted_section.body:
+                            file_extracted_section.add_line(filename)
+
                         if filename != sha256:
                             file_extracted_section.add_tag("file.name.extracted", filename)
                 except FileNotFoundError as file_not_found_error:
@@ -354,9 +366,9 @@ class Suricata(ServiceBase):
             result.add_section(file_extracted_section)
 
         # Add tags for the domains, urls, and IPs we've discovered
-        root_section = ResultSection("Discovered IOCs", parent=result)
+        root_section = ResultTextSection("Discovered IOCs", parent=result)
         if domains:
-            domain_section = ResultSection("Domains", parent=root_section)
+            domain_section = ResultTextSection("Domains", parent=root_section)
             for domain in domains:
                 if not regex.match(DOMAIN_ONLY_REGEX, domain):
                     ips.append(domain)
@@ -364,7 +376,7 @@ class Suricata(ServiceBase):
                 domain_section.add_line(domain)
                 domain_section.add_tag("network.dynamic.domain", domain)
         if ips:
-            ip_section = ResultSection("IP Addresses", parent=root_section)
+            ip_section = ResultTextSection("IP Addresses", parent=root_section)
             for ip_addr in ips:
                 # Make sure it's not a local IP
                 if not (
@@ -381,14 +393,14 @@ class Suricata(ServiceBase):
                     ip_section.add_tag("network.dynamic.ip", ip_addr)
 
         if urls:
-            url_section = ResultSection("URLs", parent=root_section)
+            url_section = ResultTextSection("URLs", parent=root_section)
             for url in urls:
                 if url.startswith("https"):
                     url = url.replace(":443", "", 1)
                 url_section.add_line(url)
                 url_section.add_tag("network.dynamic.uri", url)
         if email_addresses:
-            email_section = ResultSection("Email Addresses", parent=root_section)
+            email_section = ResultTextSection("Email Addresses", parent=root_section)
             for eml in email_addresses:
                 email_section.add_line(eml)
                 email_section.add_tag("network.email.address", eml)
@@ -405,7 +417,7 @@ class Suricata(ServiceBase):
         }
 
         if tls_dict:
-            tls_section = ResultSection("TLS Information", parent=root_section, body_format=BODY_FORMAT.JSON)
+            tls_section = ResultJSONSection("TLS Information", parent=root_section)
             kv_body = {}
             for tls_type, tls_values in tls_dict.items():
                 if tls_type == "fingerprint":
@@ -470,7 +482,7 @@ class Suricata(ServiceBase):
                 attributes = signature_details["attributes"]
                 classification = signature_meta["classification"]
                 source = signature_meta["source"]
-                section = ResultSection(
+                section = ResultMultiSection(
                     f"[{source}] {signature_id}: {signature}",
                     classification=Classification.max_classification(
                         classification,
@@ -486,10 +498,26 @@ class Suricata(ServiceBase):
                 section.set_heuristic(heur_id)
                 if signature_details:
                     section.add_tag("file.rule.suricata", f"{source}.{signature}")
+
+                table_section = TableSectionBody()
                 for timestamp, src_ip, src_port, dest_ip, dest_port in alerts[signature_key][:10]:
-                    section.add_line(f"{timestamp} {src_ip}:{src_port} -> {dest_ip}:{dest_port}")
+                    table_section.add_row(
+                        TableRow(
+                            {
+                                "Timestamp": timestamp,
+                                "Source IP": src_ip,
+                                "Source Port": src_port,
+                                "Destination IP": dest_ip,
+                                "Destination Port": dest_port,
+                            }
+                        )
+                    )
+
+                if table_section.body:
+                    section.add_section_part(table_section)
+
                 if len(alerts[signature_key]) > 10:
-                    section.add_line(f"And {len(alerts[signature_key]) - 10} more flows")
+                    section.add_section_part(TextSectionBody(body=f"And {len(alerts[signature_key]) - 10} more flows"))
 
                 # Tag IPs/Domains/URIs associated to signature
                 for flow in alerts[signature_key]:
