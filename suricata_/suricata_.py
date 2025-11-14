@@ -73,7 +73,6 @@ class Suricata(ServiceBase):
         self.suricata_conf = self.config.get("suricata_conf", {})
         self.suricata_process = None
 
-
     def run_command(self, command: list):
         """This function runs a command and logs output/errors"""
         with subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE) as process:
@@ -85,7 +84,6 @@ class Suricata(ServiceBase):
                 self.log.info(f"Output: {stdout.decode().strip()}")
 
             return process
-
 
     def start(self):
         self.log.info(f"Suricata started with service version: {self.get_service_version()}")

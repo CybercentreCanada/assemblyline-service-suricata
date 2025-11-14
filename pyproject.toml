@@ -1,2 +1,20 @@
 [tool.cruft]
 skip = ["pkglist.txt", "README.md", "suricata", "tests"]
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.format]
+docstring-code-format = true
+quote-style = "double"
+indent-style = "space"
+
+[tool.ruff.lint]
+# Add the `line-too-long` rule to the enforced rule set. By default, Ruff omits rules that
+# overlap with the use of a formatter, like Black, but we can override this behavior by
+# explicitly adding the rule.
+extend-select = ["E501"]
+preview = true
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"

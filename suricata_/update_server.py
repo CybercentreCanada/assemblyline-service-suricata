@@ -19,14 +19,8 @@ classification = forge.get_classification()
 
 
 class SuricataUpdateServer(ServiceUpdater):
-
     def import_update(
-        self,
-        files_sha256,
-        source_name,
-        default_classification=classification.UNRESTRICTED,
-        *args,
-        **kwargs
+        self, files_sha256, source_name, default_classification=classification.UNRESTRICTED, *args, **kwargs
     ):
         signatures = []
         for file, _ in files_sha256:
@@ -67,7 +61,8 @@ class SuricataUpdateServer(ServiceUpdater):
             for gid, source in enumerate(self.datastore.signature.facet("source", query="type:suricata").keys())
         }
 
-        # Before we package this bundle, modify the rules and insert a GID to deconflict rules with the same SID across sources
+        # Before we package this bundle, modify the rules and insert a GID to deconflict rules
+        # with the same SID across sources
         suricata_dir = os.path.join(new_directory, "suricata")
         for source, gid in source_gid_map.items():
             source_path = os.path.join(suricata_dir, source)
