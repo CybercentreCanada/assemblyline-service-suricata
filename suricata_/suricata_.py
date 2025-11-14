@@ -2,9 +2,7 @@ import json
 import os
 import signal
 import subprocess
-import sys
 import time
-from io import StringIO
 
 import regex
 import yaml
@@ -43,6 +41,26 @@ SURICATASC_CMD_BASE = ["suricatasc", SURICATA_SOCKET, "--command"]
 Classification = get_classification()
 
 
+def is_private_ip(ip_addr: str) -> bool:
+    """Check if an IP address is private/local"""
+    if ip_addr.startswith(("127.", "192.168.", "10.")):
+        return True
+    if ip_addr.startswith("172."):
+        try:
+            second_octet = int(ip_addr.split(".")[1])
+            if 16 <= second_octet <= 31:
+                return True
+        except (ValueError, IndexError):
+            pass
+    # Link-local IPv6 addresses
+    if ip_addr.startswith("fe80:0000:0000:0000:"):
+        return True
+    # All-routers link-local multicast
+    if ip_addr == "ff02:0000:0000:0000:0000:0000:0000:0002":
+        return True
+    return False
+
+
 class Suricata(ServiceBase):
     """This class is the main class for the Suricata service."""
 
@@ -57,30 +75,17 @@ class Suricata(ServiceBase):
 
 
     def run_command(self, command: list):
-        """This function runs a command and returns the process object"""
-        try:
-            with subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE) as process:
-                stdout, stderr = process.communicate()
+        """This function runs a command and logs output/errors"""
+        with subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE) as process:
+            stdout, stderr = process.communicate()
 
-                if process.returncode != 0:
-                    self.log.error(f"Error: {stderr.decode().strip()}")
-                else:
-                    self.log.info(f"Output: {stdout.decode().strip()}")
+            if process.returncode != 0:
+                self.log.error(f"Error: {stderr.decode().strip()}")
+            else:
+                self.log.info(f"Output: {stdout.decode().strip()}")
 
-                return process
+            return process
 
-        except Exception as broad_exception:
-            self.log.error(f"An exception occurred: {broad_exception}")
-            return None
-
-    def strip_frame_headers(self, filepath):
-        """Use an external tool to strip frame headers"""
-        new_filepath = os.path.join(os.path.dirname(filepath), "striped.pcap")
-        command = ["/usr/local/bin/stripe", "-r", filepath, "-w", new_filepath]
-
-        self.run_command(command)
-
-        return new_filepath
 
     def start(self):
         self.log.info(f"Suricata started with service version: {self.get_service_version()}")
@@ -270,21 +275,13 @@ class Suricata(ServiceBase):
         self.start_suricata_if_necessary()
 
         # Strip frame headers from the PCAP, since Suricata sometimes has trouble parsing strange PCAPs
-        stripped_filepath = self.strip_frame_headers(file_path)
+        stripped_filepath = os.path.join(os.path.dirname(file_path), "striped.pcap")
+        self.run_command(["/usr/local/bin/stripe", "-r", file_path, "-w", stripped_filepath])
 
         # Check to make sure the size of the stripped file isn't 0 - this happens on pcapng files
         # TODO: there's probably a better way to do this - don't event strip it if it's pcapng
         if os.stat(stripped_filepath).st_size == 0:
             stripped_filepath = file_path
-
-        # Switch stdout and stderr so we don't get our logs polluted
-        mystdout = StringIO()
-        old_stdout = sys.stdout
-        sys.stdout = mystdout
-
-        mystderr = StringIO()
-        old_stderr = sys.stderr
-        sys.stderr = mystderr
 
         # Pass the pcap file to Suricata via the socket
         ret = self.suricata_sc(f"pcap-file {stripped_filepath} {self.working_directory}")
@@ -303,11 +300,6 @@ class Suricata(ServiceBase):
                 raise RecoverableError(connection_reset_error) from connection_reset_error
             except BrokenPipeError as broken_pipe_error:
                 raise RecoverableError(broken_pipe_error) from broken_pipe_error
-
-        # Bring back stdout and stderr
-        sys.stdout = old_stdout
-        sys.stderr = old_stderr
-        # NOTE: for now we will ignore content of mystdout and mystderr but we have them just in case...
 
         (
             alerts,
@@ -336,9 +328,7 @@ class Suricata(ServiceBase):
                         "Extracted by Suricata",
                         safelist_interface=self.api_interface,
                     ):
-                        if not file_extracted_section.body:
-                            file_extracted_section.add_line(filename)
-                        elif filename not in file_extracted_section.body:
+                        if not file_extracted_section.body or filename not in file_extracted_section.body:
                             file_extracted_section.add_line(filename)
 
                         if filename != sha256:
@@ -356,7 +346,7 @@ class Suricata(ServiceBase):
             result.add_section(file_extracted_section)
 
         # Add tags for the domains, urls, and IPs we've discovered
-        root_section = ResultJSONSection("Discovered IOCs", parent=result)
+        root_section = ResultJSONSection("Discovered IOCs")
         data_body = {}
         if domains:
             for domain in domains:
@@ -368,16 +358,7 @@ class Suricata(ServiceBase):
         if ips:
             for ip_addr in ips:
                 # Make sure it's not a local IP
-                if not (
-                    ip_addr.startswith("127.")
-                    or ip_addr.startswith("192.168.")
-                    or ip_addr.startswith("10.")
-                    or (ip_addr.startswith("172.") and 16 <= int(ip_addr.split(".")[1]) <= 31)
-                    # Link-local IPv6 addresses
-                    or ip_addr.startswith("fe80:0000:0000:0000:")
-                    # All-routers link-local multicast
-                    or ip_addr == "ff02:0000:0000:0000:0000:0000:0000:0002"
-                ):
+                if not is_private_ip(ip_addr):
                     data_body.setdefault("ip_addresses", []).append(ip_addr)
                     root_section.add_tag("network.dynamic.ip", ip_addr)
 
@@ -391,6 +372,10 @@ class Suricata(ServiceBase):
             for eml in email_addresses:
                 data_body.setdefault("email_addresses", []).append(eml)
                 root_section.add_tag("network.email.address", eml)
+
+        if data_body:
+            root_section.set_body(json.dumps(data_body))
+            result.add_section(root_section)
 
         # Map between suricata key names and AL tag types
         tls_mappings = {
@@ -421,37 +406,27 @@ class Suricata(ServiceBase):
                             tls_section.add_tag(tag_type, tls_value)
 
                 elif tls_type == "ja3":
-                    kv_body.setdefault("ja3_hash", [])
-                    kv_body.setdefault("ja3_string", [])
                     for ja3_entry in tls_values:
-                        ja3_hash = ja3_entry.get("hash")
-                        ja3_string = ja3_entry.get("string")
-                        if ja3_hash:
-                            kv_body["ja3_hash"].append(ja3_hash)
+                        if ja3_hash := ja3_entry.get("hash"):
+                            kv_body.setdefault("ja3_hash", []).append(ja3_hash)
                             tls_section.add_tag("network.tls.ja3_hash", ja3_hash)
-                        if ja3_string:
-                            kv_body["ja3_string"].append(ja3_string)
+                        if ja3_string := ja3_entry.get("string"):
+                            kv_body.setdefault("ja3_string", []).append(ja3_string)
                             tls_section.add_tag("network.tls.ja3_string", ja3_string)
 
                 elif tls_type == "ja3s":
-                    kv_body.setdefault("ja3s_hash", [])
-                    kv_body.setdefault("ja3s_string", [])
                     for ja3s_entry in tls_values:
-                        ja3s_hash = ja3s_entry.get("hash")
-                        ja3s_string = ja3s_entry.get("string")
-                        if ja3s_hash:
-                            kv_body["ja3s_hash"].append(ja3s_hash)
+                        if ja3s_hash := ja3s_entry.get("hash"):
+                            kv_body.setdefault("ja3s_hash", []).append(ja3s_hash)
                             tls_section.add_tag("network.tls.ja3s_hash", ja3s_hash)
-                        if ja3s_string:
-                            kv_body["ja3s_string"].append(ja3s_string)
-                            tls_section.add_tag("network.tls.ja3s_string", ja3_string)
+                        if ja3s_string := ja3s_entry.get("string"):
+                            kv_body.setdefault("ja3s_string", []).append(ja3s_string)
+                            tls_section.add_tag("network.tls.ja3s_string", ja3s_string)
 
                 elif tls_type == "ja4":
-                    kv_body.setdefault("ja4_hash", [])
-                    for ja4_entry in tls_values:
-                        ja4_hash = ja4_entry
+                    for ja4_hash in tls_values:
                         if ja4_hash:
-                            kv_body["ja4_hash"].append(ja4_hash)
+                            kv_body.setdefault("ja4_hash", []).append(ja4_hash)
                             tls_section.add_tag("network.tls.ja4_hash", ja4_hash)
 
                 else:
