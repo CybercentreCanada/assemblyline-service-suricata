@@ -374,7 +374,7 @@ class Suricata(ServiceBase):
                 root_section.add_tag("network.email.address", eml)
 
         if data_body:
-            root_section.set_body(json.dumps(data_body))
+            root_section.set_json(data_body)
             result.add_section(root_section)
 
         # Map between suricata key names and AL tag types
@@ -389,7 +389,7 @@ class Suricata(ServiceBase):
         }
 
         if tls_dict:
-            tls_section = ResultJSONSection("TLS Information", parent=root_section)
+            tls_section = ResultJSONSection("TLS Information", parent=result)
             kv_body = {}
             for tls_type, tls_values in tls_dict.items():
                 if tls_type == "fingerprint":
@@ -433,7 +433,7 @@ class Suricata(ServiceBase):
                     kv_body[tls_type] = tls_values
                     # stick a message in the logs about a new TLS type found in suricata logs
                     self.log.info(f"Found new TLS type {tls_type} with values {tls_values}")
-            tls_section.set_body(json.dumps(kv_body))
+            tls_section.set_body(kv_body)
 
         # Create the result sections if there are any hits
         if len(alerts) > 0:
