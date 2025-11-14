@@ -356,17 +356,16 @@ class Suricata(ServiceBase):
             result.add_section(file_extracted_section)
 
         # Add tags for the domains, urls, and IPs we've discovered
-        root_section = ResultTextSection("Discovered IOCs", parent=result)
+        root_section = ResultJSONSection("Discovered IOCs", parent=result)
+        data_body = {}
         if domains:
-            domain_section = ResultTextSection("Domains", parent=root_section)
             for domain in domains:
                 if not regex.match(DOMAIN_ONLY_REGEX, domain):
-                    ips.append(domain)
+                    data_body.setdefault("ip_addresses", []).append(domain)
                     continue
-                domain_section.add_line(domain)
-                domain_section.add_tag("network.dynamic.domain", domain)
+                data_body.setdefault("domains", []).append(domain)
+                root_section.add_tag("network.dynamic.domain", domain)
         if ips:
-            ip_section = ResultTextSection("IP Addresses", parent=root_section)
             for ip_addr in ips:
                 # Make sure it's not a local IP
                 if not (
@@ -379,21 +378,19 @@ class Suricata(ServiceBase):
                     # All-routers link-local multicast
                     or ip_addr == "ff02:0000:0000:0000:0000:0000:0000:0002"
                 ):
-                    ip_section.add_line(ip_addr)
-                    ip_section.add_tag("network.dynamic.ip", ip_addr)
+                    data_body.setdefault("ip_addresses", []).append(ip_addr)
+                    root_section.add_tag("network.dynamic.ip", ip_addr)
 
         if urls:
-            url_section = ResultTextSection("URLs", parent=root_section)
             for url in urls:
                 if url.startswith("https"):
                     url = url.replace(":443", "", 1)
-                url_section.add_line(url)
-                url_section.add_tag("network.dynamic.uri", url)
+                data_body.setdefault("urls", []).append(url)
+                root_section.add_tag("network.dynamic.uri", url)
         if email_addresses:
-            email_section = ResultTextSection("Email Addresses", parent=root_section)
             for eml in email_addresses:
-                email_section.add_line(eml)
-                email_section.add_tag("network.email.address", eml)
+                data_body.setdefault("email_addresses", []).append(eml)
+                root_section.add_tag("network.email.address", eml)
 
         # Map between suricata key names and AL tag types
         tls_mappings = {
