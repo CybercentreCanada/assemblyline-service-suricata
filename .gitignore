@@ -214,3 +214,7 @@ tags
 .ionide
 
 # End of https://www.toptal.com/developers/gitignore/api/python,vim,visualstudiocode
+
+# Ignore sample testing files and results
+*_suricata/**
+*.cart
