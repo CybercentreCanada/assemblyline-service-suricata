@@ -7,7 +7,6 @@ import time
 from io import StringIO
 
 import regex
-import suricatasc
 import yaml
 from assemblyline.common.exceptions import RecoverableError
 from assemblyline.common.forge import get_classification
@@ -35,7 +34,12 @@ from tenacity import (
 
 from suricata_.helper import parse_suricata_output
 
-SURICATA_BIN = "/usr/local/bin/suricata"
+SURICATA_RUN_DIR = "/usr/local/var/run/suricata"
+SURICATA_SOCKET = "/usr/local/var/run/suricata/suricata.socket"
+SURICATA_YAML = "/usr/local/etc/suricata/suricata.yaml"
+SURICATA_LOG = "/usr/local/var/log/suricata/suricata.log"
+SURICATASC_CMD_BASE = ["suricatasc", SURICATA_SOCKET, "--command"]
+
 Classification = get_classification()
 
 
@@ -47,45 +51,42 @@ class Suricata(ServiceBase):
 
         self.home_net = self.config.get("home_net", "any")
         self.rules_config = yaml.safe_dump({"rule-files": []})
-        self.run_dir = "/usr/local/var/run/suricata"
-        self.suricata_socket = None
-        self.suricata_sc = None
-        self.suricata_process = None
-        self.suricata_yaml = "/usr/local/etc/suricata/suricata.yaml"
-        self.suricata_log = "/usr/local/var/log/suricata/suricata.log"
         self.uses_proxy_in_sandbox = self.config.get("uses_proxy_in_sandbox", False)
         self.suricata_conf = self.config.get("suricata_conf", {})
+        self.suricata_process = None
 
-    @staticmethod
-    def run_command(command):
+
+    def run_command(self, command: list):
         """This function runs a command and returns the process object"""
         try:
             with subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE) as process:
                 stdout, stderr = process.communicate()
 
                 if process.returncode != 0:
-                    print(f"Error: {stderr.decode().strip()}")
+                    self.log.error(f"Error: {stderr.decode().strip()}")
                 else:
-                    print(f"Output: {stdout.decode().strip()}")
+                    self.log.info(f"Output: {stdout.decode().strip()}")
 
                 return process
 
         except Exception as broad_exception:
-            print(f"An exception occurred: {broad_exception}")
+            self.log.error(f"An exception occurred: {broad_exception}")
             return None
 
-    @staticmethod
-    def strip_frame_headers(filepath):
+    def strip_frame_headers(self, filepath):
         """Use an external tool to strip frame headers"""
         new_filepath = os.path.join(os.path.dirname(filepath), "striped.pcap")
         command = ["/usr/local/bin/stripe", "-r", filepath, "-w", new_filepath]
 
-        Suricata.run_command(command)
+        self.run_command(command)
 
         return new_filepath
 
     def start(self):
         self.log.info(f"Suricata started with service version: {self.get_service_version()}")
+
+    def suricata_sc(self, command: str) -> dict:
+        return json.loads(subprocess.check_output(SURICATASC_CMD_BASE + [command]))
 
     def _load_rules(self) -> None:
         if not self.rules_list:
@@ -93,8 +94,8 @@ class Suricata(ServiceBase):
 
         self.rules_config = yaml.safe_dump({"rule-files": self.rules_list})
 
-        if not os.path.exists(self.run_dir):
-            os.makedirs(self.run_dir)
+        if not os.path.exists(SURICATA_RUN_DIR):
+            os.makedirs(SURICATA_RUN_DIR)
 
         self.replace_suricata_config()
         self.start_suricata_if_necessary()
@@ -103,7 +104,7 @@ class Suricata(ServiceBase):
             raise Exception("Unable to start Suricata because no Suricata rules were found")
 
         # Get rule stats
-        ret = self.suricata_sc.send_command("ruleset-stats")
+        ret = self.suricata_sc("ruleset-stats")
         if ret:
             for ruleset in ret.get("message"):
                 self.log.info(f"Ruleset {ruleset['id']}: {ruleset['rules_loaded']} rules loaded")
@@ -116,7 +117,7 @@ class Suricata(ServiceBase):
                     )
 
                     # Get the list of rules that failed and log them
-                    ret = self.suricata_sc.send_command("ruleset-failed-rules")
+                    ret = self.suricata_sc("ruleset-failed-rules")
                     if ret:
                         for rule in ret.get("message", []):
                             self.log.warning(f"Rule failed to load: {rule['rule']}")
@@ -149,7 +150,7 @@ class Suricata(ServiceBase):
     # Reapply our service configuration to the Suricata yaml configuration
     def replace_suricata_config(self):
         source_path = os.path.join(os.getcwd(), "suricata_", "conf", "suricata.yaml")
-        dest_path = self.suricata_yaml
+        dest_path = SURICATA_YAML
         # home_net = re.sub(r"([/\[\]])", r"\\\1", self.home_net)
         home_net = self.home_net
         with open(source_path) as s_path:
@@ -165,14 +166,14 @@ class Suricata(ServiceBase):
     # Send the reload_rules command to the socket
     def reload_rules(self):
         self.log.info("Reloading suricata rules...")
-        ret = self.suricata_sc.send_command("reload-rules")
+        ret = self.suricata_sc("reload-rules")
 
         if not ret or ret.get("return", "") != "OK":
             self.log.exception("Failed to reload Suricata rules")
             return
 
         # Get rule stats
-        ret = self.suricata_sc.send_command("ruleset-stats")
+        ret = self.suricata_sc("ruleset-stats")
         if ret:
             self.log.info(f"Current ruleset stats: {str(ret.get('message'))}")
 
@@ -185,16 +186,11 @@ class Suricata(ServiceBase):
 
     # Try connecting to the Suricata socket
     def suricata_running(self):
-        if self.suricata_sc is None:
-            return False
         try:
-            self.suricata_sc.connect()
-        except suricatasc.SuricataException as suricata_exception:
-            if "Transport endpoint is already connected" in str(suricata_exception):
-                return True
+            return self.suricata_sc("uptime")["return"] == "OK"
+        except Exception as suricata_exception:
             self.log.info(f"Suricata not started yet: {str(suricata_exception)}")
             return False
-        return True
 
     # Retry with exponential backoff until we can actually connect to the Suricata socket
     @retry(
@@ -212,7 +208,7 @@ class Suricata(ServiceBase):
         Check whether a PID file already exists; if it does, this might be a restart
         and we should remove it as there likely isn't a running Suricata instance.
         """
-        pid_path = os.path.join(self.run_dir, "suricata.pid")
+        pid_path = os.path.join(SURICATA_RUN_DIR, "suricata.pid")
         if os.path.exists(pid_path):
             self.log.warning("Attempting to remove stale Suricata PID file")
             with open(pid_path, "r") as pid_file:
@@ -230,32 +226,29 @@ class Suricata(ServiceBase):
             except PermissionError:
                 raise PermissionError("Could not delete stale Suricata PID file")
 
-        self.suricata_socket = os.path.join(self.run_dir, "suricata.socket")
-        if os.path.exists(self.suricata_socket):
+        if os.path.exists(SURICATA_SOCKET):
             self.log.warning("Attempting to remove stale Suricata socket file")
             try:
-                os.unlink(self.suricata_socket)
+                os.unlink(SURICATA_SOCKET)
             except PermissionError:
                 raise PermissionError("Could not delete stale Suricata socket file")
 
         command = [
-            SURICATA_BIN,
+            "suricata",
             "-vvvv",  # Useful for debugging
             "-c",
-            self.suricata_yaml,
-            f"--unix-socket={self.suricata_socket}",
+            SURICATA_YAML,
+            f"--unix-socket={SURICATA_SOCKET}",
             "--pidfile",
-            f"{self.run_dir}/suricata.pid",
+            f"{SURICATA_RUN_DIR}/suricata.pid",
             "--set",
-            f"logging.outputs.1.file.filename={self.suricata_log}",
+            f"logging.outputs.1.file.filename={SURICATA_LOG}",
             "-D",
         ]
 
         self.log.info(f"Launching Suricata: {' '.join(command)}")
 
         self.suricata_process = self.run_command(command)
-
-        self.suricata_sc = suricatasc.SuricataSC(self.suricata_socket)
 
         if not self.suricata_running_retry():
             raise Exception("Suricata could not be started.")
@@ -294,10 +287,7 @@ class Suricata(ServiceBase):
         sys.stderr = mystderr
 
         # Pass the pcap file to Suricata via the socket
-        ret = self.suricata_sc.send_command(
-            "pcap-file",
-            {"filename": stripped_filepath, "output-dir": self.working_directory},
-        )
+        ret = self.suricata_sc(f"pcap-file {stripped_filepath} {self.working_directory}")
 
         if not ret or ret["return"] != "OK":
             self.log.exception(f"Failed to submit PCAP for processing: {ret['message']}")
@@ -306,7 +296,7 @@ class Suricata(ServiceBase):
         while True:
             time.sleep(1)
             try:
-                ret = self.suricata_sc.send_command("pcap-current")
+                ret = self.suricata_sc("pcap-current")
                 if ret and ret["message"] == "None":
                     break
             except ConnectionResetError as connection_reset_error:

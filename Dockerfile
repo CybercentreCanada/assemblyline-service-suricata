@@ -30,9 +30,9 @@ RUN export PATH=$PATH:${HOME}/.cargo/bin && cargo install --force cbindgen
 # Build suricata
 RUN mkdir -p /suricata
 WORKDIR /suricata
-ADD https://github.com/OISF/suricata.git#main-8.0.x /suricata/suricata
+ADD https://github.com/OISF/suricata.git#suricata-8.0.2 /suricata/suricata
 WORKDIR /suricata/suricata
-RUN ./scripts/bundle.sh && ./autogen.sh &&./configure --disable-gccmarch-native && make && \
+RUN ./scripts/bundle.sh && ./autogen.sh &&./configure && make && \
     DESTDIR=/suricata/suricata/fakeroot make install install-conf && \
     ldconfig
 
