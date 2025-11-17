@@ -71,15 +71,15 @@ dependencies:
       ram_mb: 4096
     run_as_core: True
 
-# update_config:
-#   generates_signatures: true
-#   sources:
-#     - name: emt
-#       uri: https://rules.emergingthreats.net/open/suricata/emerging.rules.tar.gz
-#     - name: snort3_community
-#       uri: https://www.snort.org/downloads/community/snort3-community-rules.tar.gz
-#     - name: urlhaus
-#       uri: https://urlhaus.abuse.ch/downloads/urlhaus_suricata.tar.gz
-#   update_interval_seconds: 21600 # Quarter-day (every 6 hours)
-#   wait_for_update: true
-#   default_pattern: .*\.rules
+update_config:
+  generates_signatures: true
+  sources:
+    - name: emt
+      uri: https://rules.emergingthreats.net/open/suricata/emerging.rules.tar.gz
+    - name: snort3_community
+      uri: https://www.snort.org/downloads/community/snort3-community-rules.tar.gz
+    - name: urlhaus
+      uri: https://urlhaus.abuse.ch/downloads/urlhaus_suricata.tar.gz
+  update_interval_seconds: 21600 # Quarter-day (every 6 hours)
+  wait_for_update: true
+  default_pattern: .*\.rules

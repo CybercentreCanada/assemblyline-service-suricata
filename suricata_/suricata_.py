@@ -318,7 +318,6 @@ class Suricata(ServiceBase):
         if request.get_param("extract_files"):
             for file in extracted_files:
                 sha256, filename, extracted_file_path = file.values()
-                self.log.info(f"extracted file {filename}")
                 try:
                     if request.add_extracted(
                         extracted_file_path,
@@ -330,6 +329,7 @@ class Suricata(ServiceBase):
                             file_extracted_section.add_line(filename)
 
                         if filename != sha256:
+                            self.log.info(f"extracted file '{filename}' [{sha256}]")
                             file_extracted_section.add_tag("file.name.extracted", filename)
                 except FileNotFoundError as file_not_found_error:
                     # An intermittent issue, just try again
