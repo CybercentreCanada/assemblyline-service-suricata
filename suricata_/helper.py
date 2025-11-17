@@ -153,12 +153,15 @@ def parse_suricata_output(
             network_data["http_details"] = {
                 "request_uri": url,
                 "request_headers": {
-                    h["name"].replace("-", "_").lower(): h["value"] for h in http_details.get("request_headers", [])
+                    h["name"].replace("-", "_").lower(): h["value"]
+                    for h in http_details.get("request_headers", [])
                     if "value" in h
                 },
                 "request_method": http_details.get("http_method", "").upper(),
                 "response_headers": {
-                    h["name"].replace("-", "_").lower(): h["value"] for h in http_details.get("response_headers", []) if "value" in h
+                    h["name"].replace("-", "_").lower(): h["value"]
+                    for h in http_details.get("response_headers", [])
+                    if "value" in h
                 },
             }
             temp_submission_data["url_headers"].update(
@@ -267,7 +270,7 @@ def parse_suricata_output(
                         if http_record["url"].startswith(hostname):
                             url = f"{app_proto}://{record['http']['url']}"
                         else:
-                            url = f"{app_proto}://{hostname+record['http']['url']}"
+                            url = f"{app_proto}://{hostname + record['http']['url']}"
                         url = (
                             convert_url_to_https(http_record.get("http_method", "GET"), url)
                             if from_proxied_sandbox

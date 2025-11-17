@@ -2,12 +2,9 @@ import json
 import os
 import signal
 import subprocess
-import sys
 import time
-from io import StringIO
 
 import regex
-import suricatasc
 import yaml
 from assemblyline.common.exceptions import RecoverableError
 from assemblyline.common.forge import get_classification
@@ -16,7 +13,15 @@ from assemblyline.odm.base import DOMAIN_ONLY_REGEX
 from assemblyline.odm.models.ontology.results import Signature
 from assemblyline_v4_service.common.base import ServiceBase
 from assemblyline_v4_service.common.request import MaxExtractedExceeded
-from assemblyline_v4_service.common.result import BODY_FORMAT, Result, ResultSection
+from assemblyline_v4_service.common.result import (
+    Result,
+    ResultJSONSection,
+    ResultMultiSection,
+    ResultTextSection,
+    TableRow,
+    TableSectionBody,
+    TextSectionBody,
+)
 from tenacity import (
     RetryError,
     retry,
@@ -27,8 +32,33 @@ from tenacity import (
 
 from suricata_.helper import parse_suricata_output
 
-SURICATA_BIN = "/usr/local/bin/suricata"
+SURICATA_RUN_DIR = "/usr/local/var/run/suricata"
+SURICATA_SOCKET = "/usr/local/var/run/suricata/suricata.socket"
+SURICATA_YAML = "/usr/local/etc/suricata/suricata.yaml"
+SURICATA_LOG = "/usr/local/var/log/suricata/suricata.log"
+SURICATASC_CMD_BASE = ["suricatasc", SURICATA_SOCKET, "--command"]
+
 Classification = get_classification()
+
+
+def is_private_ip(ip_addr: str) -> bool:
+    """Check if an IP address is private/local"""
+    if ip_addr.startswith(("127.", "192.168.", "10.")):
+        return True
+    if ip_addr.startswith("172."):
+        try:
+            second_octet = int(ip_addr.split(".")[1])
+            if 16 <= second_octet <= 31:
+                return True
+        except (ValueError, IndexError):
+            pass
+    # Link-local IPv6 addresses
+    if ip_addr.startswith("fe80:0000:0000:0000:"):
+        return True
+    # All-routers link-local multicast
+    if ip_addr == "ff02:0000:0000:0000:0000:0000:0000:0002":
+        return True
+    return False
 
 
 class Suricata(ServiceBase):
@@ -39,45 +69,27 @@ class Suricata(ServiceBase):
 
         self.home_net = self.config.get("home_net", "any")
         self.rules_config = yaml.safe_dump({"rule-files": []})
-        self.run_dir = "/usr/local/var/run/suricata"
-        self.suricata_socket = None
-        self.suricata_sc = None
-        self.suricata_process = None
-        self.suricata_yaml = "/usr/local/etc/suricata/suricata.yaml"
-        self.suricata_log = "/usr/local/var/log/suricata/suricata.log"
         self.uses_proxy_in_sandbox = self.config.get("uses_proxy_in_sandbox", False)
         self.suricata_conf = self.config.get("suricata_conf", {})
+        self.suricata_process = None
 
-    @staticmethod
-    def run_command(command):
-        """This function runs a command and returns the process object"""
-        try:
-            with subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE) as process:
-                stdout, stderr = process.communicate()
+    def run_command(self, command: list):
+        """This function runs a command and logs output/errors"""
+        with subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE) as process:
+            stdout, stderr = process.communicate()
 
-                if process.returncode != 0:
-                    print(f"Error: {stderr.decode().strip()}")
-                else:
-                    print(f"Output: {stdout.decode().strip()}")
+            if process.returncode != 0:
+                self.log.error(f"Error: {stderr.decode().strip()}")
+            else:
+                self.log.info(f"Output: {stdout.decode().strip()}")
 
-                return process
-
-        except Exception as broad_exception:
-            print(f"An exception occurred: {broad_exception}")
-            return None
-
-    @staticmethod
-    def strip_frame_headers(filepath):
-        """Use an external tool to strip frame headers"""
-        new_filepath = os.path.join(os.path.dirname(filepath), "striped.pcap")
-        command = ["/usr/local/bin/stripe", "-r", filepath, "-w", new_filepath]
-
-        Suricata.run_command(command)
-
-        return new_filepath
+            return process
 
     def start(self):
         self.log.info(f"Suricata started with service version: {self.get_service_version()}")
+
+    def suricata_sc(self, command: str) -> dict:
+        return json.loads(subprocess.check_output(SURICATASC_CMD_BASE + [command]))
 
     def _load_rules(self) -> None:
         if not self.rules_list:
@@ -85,8 +97,8 @@ class Suricata(ServiceBase):
 
         self.rules_config = yaml.safe_dump({"rule-files": self.rules_list})
 
-        if not os.path.exists(self.run_dir):
-            os.makedirs(self.run_dir)
+        if not os.path.exists(SURICATA_RUN_DIR):
+            os.makedirs(SURICATA_RUN_DIR)
 
         self.replace_suricata_config()
         self.start_suricata_if_necessary()
@@ -95,7 +107,7 @@ class Suricata(ServiceBase):
             raise Exception("Unable to start Suricata because no Suricata rules were found")
 
         # Get rule stats
-        ret = self.suricata_sc.send_command("ruleset-stats")
+        ret = self.suricata_sc("ruleset-stats")
         if ret:
             for ruleset in ret.get("message"):
                 self.log.info(f"Ruleset {ruleset['id']}: {ruleset['rules_loaded']} rules loaded")
@@ -108,7 +120,7 @@ class Suricata(ServiceBase):
                     )
 
                     # Get the list of rules that failed and log them
-                    ret = self.suricata_sc.send_command("ruleset-failed-rules")
+                    ret = self.suricata_sc("ruleset-failed-rules")
                     if ret:
                         for rule in ret.get("message", []):
                             self.log.warning(f"Rule failed to load: {rule['rule']}")
@@ -141,7 +153,7 @@ class Suricata(ServiceBase):
     # Reapply our service configuration to the Suricata yaml configuration
     def replace_suricata_config(self):
         source_path = os.path.join(os.getcwd(), "suricata_", "conf", "suricata.yaml")
-        dest_path = self.suricata_yaml
+        dest_path = SURICATA_YAML
         # home_net = re.sub(r"([/\[\]])", r"\\\1", self.home_net)
         home_net = self.home_net
         with open(source_path) as s_path:
@@ -157,14 +169,14 @@ class Suricata(ServiceBase):
     # Send the reload_rules command to the socket
     def reload_rules(self):
         self.log.info("Reloading suricata rules...")
-        ret = self.suricata_sc.send_command("reload-rules")
+        ret = self.suricata_sc("reload-rules")
 
         if not ret or ret.get("return", "") != "OK":
             self.log.exception("Failed to reload Suricata rules")
             return
 
         # Get rule stats
-        ret = self.suricata_sc.send_command("ruleset-stats")
+        ret = self.suricata_sc("ruleset-stats")
         if ret:
             self.log.info(f"Current ruleset stats: {str(ret.get('message'))}")
 
@@ -177,16 +189,11 @@ class Suricata(ServiceBase):
 
     # Try connecting to the Suricata socket
     def suricata_running(self):
-        if self.suricata_sc is None:
-            return False
         try:
-            self.suricata_sc.connect()
-        except suricatasc.SuricataException as suricata_exception:
-            if "Transport endpoint is already connected" in str(suricata_exception):
-                return True
+            return self.suricata_sc("uptime")["return"] == "OK"
+        except Exception as suricata_exception:
             self.log.info(f"Suricata not started yet: {str(suricata_exception)}")
             return False
-        return True
 
     # Retry with exponential backoff until we can actually connect to the Suricata socket
     @retry(
@@ -204,7 +211,7 @@ class Suricata(ServiceBase):
         Check whether a PID file already exists; if it does, this might be a restart
         and we should remove it as there likely isn't a running Suricata instance.
         """
-        pid_path = os.path.join(self.run_dir, "suricata.pid")
+        pid_path = os.path.join(SURICATA_RUN_DIR, "suricata.pid")
         if os.path.exists(pid_path):
             self.log.warning("Attempting to remove stale Suricata PID file")
             with open(pid_path, "r") as pid_file:
@@ -222,32 +229,29 @@ class Suricata(ServiceBase):
             except PermissionError:
                 raise PermissionError("Could not delete stale Suricata PID file")
 
-        self.suricata_socket = os.path.join(self.run_dir, "suricata.socket")
-        if os.path.exists(self.suricata_socket):
+        if os.path.exists(SURICATA_SOCKET):
             self.log.warning("Attempting to remove stale Suricata socket file")
             try:
-                os.unlink(self.suricata_socket)
+                os.unlink(SURICATA_SOCKET)
             except PermissionError:
                 raise PermissionError("Could not delete stale Suricata socket file")
 
         command = [
-            SURICATA_BIN,
+            "suricata",
             "-vvvv",  # Useful for debugging
             "-c",
-            self.suricata_yaml,
-            f"--unix-socket={self.suricata_socket}",
+            SURICATA_YAML,
+            f"--unix-socket={SURICATA_SOCKET}",
             "--pidfile",
-            f"{self.run_dir}/suricata.pid",
+            f"{SURICATA_RUN_DIR}/suricata.pid",
             "--set",
-            f"logging.outputs.1.file.filename={self.suricata_log}",
+            f"logging.outputs.1.file.filename={SURICATA_LOG}",
             "-D",
         ]
 
         self.log.info(f"Launching Suricata: {' '.join(command)}")
 
         self.suricata_process = self.run_command(command)
-
-        self.suricata_sc = suricatasc.SuricataSC(self.suricata_socket)
 
         if not self.suricata_running_retry():
             raise Exception("Suricata could not be started.")
@@ -269,27 +273,16 @@ class Suricata(ServiceBase):
         self.start_suricata_if_necessary()
 
         # Strip frame headers from the PCAP, since Suricata sometimes has trouble parsing strange PCAPs
-        stripped_filepath = self.strip_frame_headers(file_path)
+        stripped_filepath = os.path.join(os.path.dirname(file_path), "striped.pcap")
+        self.run_command(["/usr/local/bin/stripe", "-r", file_path, "-w", stripped_filepath])
 
         # Check to make sure the size of the stripped file isn't 0 - this happens on pcapng files
         # TODO: there's probably a better way to do this - don't event strip it if it's pcapng
         if os.stat(stripped_filepath).st_size == 0:
             stripped_filepath = file_path
 
-        # Switch stdout and stderr so we don't get our logs polluted
-        mystdout = StringIO()
-        old_stdout = sys.stdout
-        sys.stdout = mystdout
-
-        mystderr = StringIO()
-        old_stderr = sys.stderr
-        sys.stderr = mystderr
-
         # Pass the pcap file to Suricata via the socket
-        ret = self.suricata_sc.send_command(
-            "pcap-file",
-            {"filename": stripped_filepath, "output-dir": self.working_directory},
-        )
+        ret = self.suricata_sc(f"pcap-file {stripped_filepath} {self.working_directory}")
 
         if not ret or ret["return"] != "OK":
             self.log.exception(f"Failed to submit PCAP for processing: {ret['message']}")
@@ -298,18 +291,13 @@ class Suricata(ServiceBase):
         while True:
             time.sleep(1)
             try:
-                ret = self.suricata_sc.send_command("pcap-current")
+                ret = self.suricata_sc("pcap-current")
                 if ret and ret["message"] == "None":
                     break
             except ConnectionResetError as connection_reset_error:
                 raise RecoverableError(connection_reset_error) from connection_reset_error
             except BrokenPipeError as broken_pipe_error:
                 raise RecoverableError(broken_pipe_error) from broken_pipe_error
-
-        # Bring back stdout and stderr
-        sys.stdout = old_stdout
-        sys.stderr = old_stderr
-        # NOTE: for now we will ignore content of mystdout and mystderr but we have them just in case...
 
         (
             alerts,
@@ -325,12 +313,11 @@ class Suricata(ServiceBase):
             self.working_directory, request.temp_submission_data, self.uses_proxy_in_sandbox, self.ontology
         ).values()
 
-        file_extracted_section = ResultSection("File(s) extracted by Suricata")
+        file_extracted_section = ResultTextSection("File(s) extracted by Suricata")
         # Parse the json results of the service
         if request.get_param("extract_files"):
             for file in extracted_files:
                 sha256, filename, extracted_file_path = file.values()
-                self.log.info(f"extracted file {filename}")
                 try:
                     if request.add_extracted(
                         extracted_file_path,
@@ -338,8 +325,11 @@ class Suricata(ServiceBase):
                         "Extracted by Suricata",
                         safelist_interface=self.api_interface,
                     ):
-                        file_extracted_section.add_line(filename)
+                        if not file_extracted_section.body or filename not in file_extracted_section.body:
+                            file_extracted_section.add_line(filename)
+
                         if filename != sha256:
+                            self.log.info(f"extracted file '{filename}' [{sha256}]")
                             file_extracted_section.add_tag("file.name.extracted", filename)
                 except FileNotFoundError as file_not_found_error:
                     # An intermittent issue, just try again
@@ -354,44 +344,36 @@ class Suricata(ServiceBase):
             result.add_section(file_extracted_section)
 
         # Add tags for the domains, urls, and IPs we've discovered
-        root_section = ResultSection("Discovered IOCs", parent=result)
+        root_section = ResultJSONSection("Discovered IOCs")
+        data_body = {}
         if domains:
-            domain_section = ResultSection("Domains", parent=root_section)
             for domain in domains:
                 if not regex.match(DOMAIN_ONLY_REGEX, domain):
-                    ips.append(domain)
+                    data_body.setdefault("ip_addresses", []).append(domain)
                     continue
-                domain_section.add_line(domain)
-                domain_section.add_tag("network.dynamic.domain", domain)
+                data_body.setdefault("domains", []).append(domain)
+                root_section.add_tag("network.dynamic.domain", domain)
         if ips:
-            ip_section = ResultSection("IP Addresses", parent=root_section)
             for ip_addr in ips:
                 # Make sure it's not a local IP
-                if not (
-                    ip_addr.startswith("127.")
-                    or ip_addr.startswith("192.168.")
-                    or ip_addr.startswith("10.")
-                    or (ip_addr.startswith("172.") and 16 <= int(ip_addr.split(".")[1]) <= 31)
-                    # Link-local IPv6 addresses
-                    or ip_addr.startswith("fe80:0000:0000:0000:")
-                    # All-routers link-local multicast
-                    or ip_addr == "ff02:0000:0000:0000:0000:0000:0000:0002"
-                ):
-                    ip_section.add_line(ip_addr)
-                    ip_section.add_tag("network.dynamic.ip", ip_addr)
+                if not is_private_ip(ip_addr):
+                    data_body.setdefault("ip_addresses", []).append(ip_addr)
+                    root_section.add_tag("network.dynamic.ip", ip_addr)
 
         if urls:
-            url_section = ResultSection("URLs", parent=root_section)
             for url in urls:
                 if url.startswith("https"):
                     url = url.replace(":443", "", 1)
-                url_section.add_line(url)
-                url_section.add_tag("network.dynamic.uri", url)
+                data_body.setdefault("urls", []).append(url)
+                root_section.add_tag("network.dynamic.uri", url)
         if email_addresses:
-            email_section = ResultSection("Email Addresses", parent=root_section)
             for eml in email_addresses:
-                email_section.add_line(eml)
-                email_section.add_tag("network.email.address", eml)
+                data_body.setdefault("email_addresses", []).append(eml)
+                root_section.add_tag("network.email.address", eml)
+
+        if data_body:
+            root_section.set_json(data_body)
+            result.add_section(root_section)
 
         # Map between suricata key names and AL tag types
         tls_mappings = {
@@ -405,7 +387,7 @@ class Suricata(ServiceBase):
         }
 
         if tls_dict:
-            tls_section = ResultSection("TLS Information", parent=root_section, body_format=BODY_FORMAT.JSON)
+            tls_section = ResultJSONSection("TLS Information", parent=result)
             kv_body = {}
             for tls_type, tls_values in tls_dict.items():
                 if tls_type == "fingerprint":
@@ -422,44 +404,34 @@ class Suricata(ServiceBase):
                             tls_section.add_tag(tag_type, tls_value)
 
                 elif tls_type == "ja3":
-                    kv_body.setdefault("ja3_hash", [])
-                    kv_body.setdefault("ja3_string", [])
                     for ja3_entry in tls_values:
-                        ja3_hash = ja3_entry.get("hash")
-                        ja3_string = ja3_entry.get("string")
-                        if ja3_hash:
-                            kv_body["ja3_hash"].append(ja3_hash)
+                        if ja3_hash := ja3_entry.get("hash"):
+                            kv_body.setdefault("ja3_hash", []).append(ja3_hash)
                             tls_section.add_tag("network.tls.ja3_hash", ja3_hash)
-                        if ja3_string:
-                            kv_body["ja3_string"].append(ja3_string)
+                        if ja3_string := ja3_entry.get("string"):
+                            kv_body.setdefault("ja3_string", []).append(ja3_string)
                             tls_section.add_tag("network.tls.ja3_string", ja3_string)
 
                 elif tls_type == "ja3s":
-                    kv_body.setdefault("ja3s_hash", [])
-                    kv_body.setdefault("ja3s_string", [])
                     for ja3s_entry in tls_values:
-                        ja3s_hash = ja3s_entry.get("hash")
-                        ja3s_string = ja3s_entry.get("string")
-                        if ja3s_hash:
-                            kv_body["ja3s_hash"].append(ja3s_hash)
+                        if ja3s_hash := ja3s_entry.get("hash"):
+                            kv_body.setdefault("ja3s_hash", []).append(ja3s_hash)
                             tls_section.add_tag("network.tls.ja3s_hash", ja3s_hash)
-                        if ja3s_string:
-                            kv_body["ja3s_string"].append(ja3s_string)
-                            tls_section.add_tag("network.tls.ja3s_string", ja3_string)
+                        if ja3s_string := ja3s_entry.get("string"):
+                            kv_body.setdefault("ja3s_string", []).append(ja3s_string)
+                            tls_section.add_tag("network.tls.ja3s_string", ja3s_string)
 
                 elif tls_type == "ja4":
-                    kv_body.setdefault("ja4_hash", [])
-                    for ja4_entry in tls_values:
-                        ja4_hash = ja4_entry
+                    for ja4_hash in tls_values:
                         if ja4_hash:
-                            kv_body["ja4_hash"].append(ja4_hash)
+                            kv_body.setdefault("ja4_hash", []).append(ja4_hash)
                             tls_section.add_tag("network.tls.ja4_hash", ja4_hash)
 
                 else:
                     kv_body[tls_type] = tls_values
                     # stick a message in the logs about a new TLS type found in suricata logs
                     self.log.info(f"Found new TLS type {tls_type} with values {tls_values}")
-            tls_section.set_body(json.dumps(kv_body))
+            tls_section.set_body(kv_body)
 
         # Create the result sections if there are any hits
         if len(alerts) > 0:
@@ -470,7 +442,7 @@ class Suricata(ServiceBase):
                 attributes = signature_details["attributes"]
                 classification = signature_meta["classification"]
                 source = signature_meta["source"]
-                section = ResultSection(
+                section = ResultMultiSection(
                     f"[{source}] {signature_id}: {signature}",
                     classification=Classification.max_classification(
                         classification,
@@ -486,10 +458,26 @@ class Suricata(ServiceBase):
                 section.set_heuristic(heur_id)
                 if signature_details:
                     section.add_tag("file.rule.suricata", f"{source}.{signature}")
+
+                table_section = TableSectionBody()
                 for timestamp, src_ip, src_port, dest_ip, dest_port in alerts[signature_key][:10]:
-                    section.add_line(f"{timestamp} {src_ip}:{src_port} -> {dest_ip}:{dest_port}")
+                    table_section.add_row(
+                        TableRow(
+                            {
+                                "Timestamp": timestamp,
+                                "Source IP": src_ip,
+                                "Source Port": src_port,
+                                "Destination IP": dest_ip,
+                                "Destination Port": dest_port,
+                            }
+                        )
+                    )
+
+                if table_section.body:
+                    section.add_section_part(table_section)
+
                 if len(alerts[signature_key]) > 10:
-                    section.add_line(f"And {len(alerts[signature_key]) - 10} more flows")
+                    section.add_section_part(TextSectionBody(body=f"And {len(alerts[signature_key]) - 10} more flows"))
 
                 # Tag IPs/Domains/URIs associated to signature
                 for flow in alerts[signature_key]:
