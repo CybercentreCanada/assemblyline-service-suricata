@@ -6,6 +6,7 @@ import tempfile
 import time
 
 from assemblyline.common import forge
+from assemblyline.common.classification import Classification
 from assemblyline.odm.models.signature import Signature
 from assemblyline_v4_service.updater.updater import (
     SIGNATURES_META_FILENAME,
@@ -15,25 +16,40 @@ from assemblyline_v4_service.updater.updater import (
 )
 from suricataparser import parse_file
 
-classification = forge.get_classification()
+c12n: Classification = forge.get_classification()
 
 
 class SuricataUpdateServer(ServiceUpdater):
-    def import_update(
-        self, files_sha256, source_name, default_classification=classification.UNRESTRICTED, *args, **kwargs
-    ):
+    def import_update(self, files_sha256, source_name, default_classification=c12n.UNRESTRICTED, *args, **kwargs):
         signatures = []
         for file, _ in files_sha256:
             for rule_signature in parse_file(file):
                 name = rule_signature.msg or rule_signature.sid
                 status = "DEPLOYED" if rule_signature.enabled else "DISABLED"
-                classification = default_classification or self.classification.UNRESTRICTED
+                classification = None
 
                 # Extract the rule's classification, if any
                 for meta in rule_signature.metadata:
                     if meta.startswith("classification "):
+                        # Extract classification from metadata
                         classification = meta.replace("classification ", "")
-                        break
+                        try:
+                            # Check if the classification is valid to the system
+                            c12n.normalize_classification(classification)
+                        except ValueError:
+                            classification = None
+                    elif meta.startswith("tlp "):
+                        # Extract TLP from metadata
+                        classification = meta.replace(" ", ":", 1)
+                        try:
+                            # Check if the classification is valid to the system
+                            c12n.normalize_classification(classification)
+                        except ValueError:
+                            classification = None
+
+                if not classification:
+                    classification = default_classification or c12n.UNRESTRICTED
+
                 signatures.append(
                     Signature(
                         {
