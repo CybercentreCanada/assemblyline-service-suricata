@@ -15,12 +15,12 @@ from assemblyline_v4_service.updater.updater import (
 )
 from suricataparser import parse_file
 
-classification = forge.get_classification()
+c12n = forge.get_classification()
 
 
 class SuricataUpdateServer(ServiceUpdater):
     def import_update(
-        self, files_sha256, source_name, default_classification=classification.UNRESTRICTED, *args, **kwargs
+        self, files_sha256, source_name, default_classification=c12n.UNRESTRICTED, *args, **kwargs
     ):
         signatures = []
         for file, _ in files_sha256:
@@ -46,7 +46,7 @@ class SuricataUpdateServer(ServiceUpdater):
                             # Classification marking not recognized by system
                             classification = None
 
-                classification := default_classification
+                classification = classification or default_classification or c12n.UNRESTRICTED
                 signatures.append(
                     Signature(
                         {
