@@ -27,13 +27,26 @@ class SuricataUpdateServer(ServiceUpdater):
             for rule_signature in parse_file(file):
                 name = rule_signature.msg or rule_signature.sid
                 status = "DEPLOYED" if rule_signature.enabled else "DISABLED"
-                classification = default_classification or self.classification.UNRESTRICTED
+                classification = None
 
                 # Extract the rule's classification, if any
                 for meta in rule_signature.metadata:
                     if meta.startswith("classification "):
                         classification = meta.replace("classification ", "")
-                        break
+                    elif meta.startswith("tlp "):
+                        classification = meta.replace("tlp ", "tlp:")
+
+                    # If a sharing marking was derived from metadata, validate it against the system
+                    if classification:
+                        try:
+                            # Validation that classification can be used with system
+                            self.classification.normalize_classification(classification)
+                            break
+                        except Exception:
+                            # Classification marking not recognized by system
+                            classification = None
+
+                classification := default_classification
                 signatures.append(
                     Signature(
                         {
