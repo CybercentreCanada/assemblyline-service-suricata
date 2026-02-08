@@ -19,9 +19,7 @@ c12n = forge.get_classification()
 
 
 class SuricataUpdateServer(ServiceUpdater):
-    def import_update(
-        self, files_sha256, source_name, default_classification=c12n.UNRESTRICTED, *args, **kwargs
-    ):
+    def import_update(self, files_sha256, source_name, default_classification=c12n.UNRESTRICTED, *args, **kwargs):
         signatures = []
         for file, _ in files_sha256:
             for rule_signature in parse_file(file):
@@ -40,7 +38,7 @@ class SuricataUpdateServer(ServiceUpdater):
                     if classification:
                         try:
                             # Validation that classification can be used with system
-                            self.classification.normalize_classification(classification)
+                            c12n.normalize_classification(classification)
                             break
                         except Exception:
                             # Classification marking not recognized by system
