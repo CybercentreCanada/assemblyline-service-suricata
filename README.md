@@ -16,7 +16,6 @@ The ruleset(s) configured by default for use with this service are:
 
 - [Emerging Threats Open](https://rules.emergingthreats.net/open/suricata/emerging.rules.tar.gz)
 - [Snortv3 Community](https://www.snort.org/downloads/community/snort3-community-rules.tar.gz)
-- [URLhaus](https://urlhaus.abuse.ch/downloads/urlhaus_suricata.tar.gz)
 
 Organizations can add their own rulesets to this service.
 
@@ -64,7 +63,6 @@ Le(s) jeu(x) de règles configuré(s) par défaut pour être utilisé(s) avec ce
 
 - [Emerging Threats Open](https://rules.emergingthreats.net/open/suricata/emerging.rules.tar.gz)
 - [Snortv3 Community](https://www.snort.org/downloads/community/snort3-community-rules.tar.gz)
-- [URLhaus](https://urlhaus.abuse.ch/downloads/urlhaus_suricata.tar.gz)
 
 Les organisations peuvent ajouter leurs propres jeux de règles à ce service.
 
