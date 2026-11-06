@@ -78,6 +78,12 @@ update_config:
       uri: https://rules.emergingthreats.net/open/suricata/emerging.rules.tar.gz
     - name: snort3_community
       uri: https://www.snort.org/downloads/community/snort3-community-rules.tar.gz
+    # URLhaus requires an abuse.ch Auth-Key; see https://urlhaus.abuse.ch/api/#ids for the ruleset URL.
+    # - name: urlhaus
+    #   uri: <URLhaus Suricata ruleset URL>
+    #   headers:
+    #     - name: Auth-Key
+    #       value: <your Auth-Key>
   update_interval_seconds: 21600 # Quarter-day (every 6 hours)
   wait_for_update: true
   default_pattern: .*\.rules

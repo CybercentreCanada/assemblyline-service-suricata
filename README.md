@@ -17,7 +17,8 @@ The ruleset(s) configured by default for use with this service are:
 - [Emerging Threats Open](https://rules.emergingthreats.net/open/suricata/emerging.rules.tar.gz)
 - [Snortv3 Community](https://www.snort.org/downloads/community/snort3-community-rules.tar.gz)
 
-Organizations can add their own rulesets to this service.
+Organizations can add their own rulesets to this service. The [URLhaus](https://urlhaus.abuse.ch/api/#ids) ruleset requires an
+abuse.ch `Auth-Key` header; a commented-out example is included in `service_manifest.yml`.
 
 ## Image variants and tags
 
@@ -64,7 +65,8 @@ Le(s) jeu(x) de règles configuré(s) par défaut pour être utilisé(s) avec ce
 - [Emerging Threats Open](https://rules.emergingthreats.net/open/suricata/emerging.rules.tar.gz)
 - [Snortv3 Community](https://www.snort.org/downloads/community/snort3-community-rules.tar.gz)
 
-Les organisations peuvent ajouter leurs propres jeux de règles à ce service.
+Les organisations peuvent ajouter leurs propres jeux de règles à ce service. Le jeu de règles [URLhaus](https://urlhaus.abuse.ch/api/#ids)
+nécessite un en-tête `Auth-Key` abuse.ch ; un exemple commenté est inclus dans `service_manifest.yml`.
 
 ## Variantes et étiquettes d'image
 
